@@ -1,7 +1,8 @@
-from typing import Any, Optional
+from typing import Any
 import numpy as np
 from .abc import AgentsFunction
-from .state import Envir, Accumulation
+from .envir import Envir
+from .accumulation import Accumulation
 from .utility import UtilityFunction, UtilIdentity
 from ...typing import FloatND
 
@@ -23,19 +24,19 @@ class Profits(AgentsFunction):
     """
     def __init__(
         self,
-        accumulation: Accumulation,
+        envir: Envir,
         sustenance: float = 0,
         cost: float = 0,
         **kwds: Any
     ) -> None:
         super().__init__(**kwds)
-        self.accumulation = accumulation
+        self.envir = envir
         self.sustenance = sustenance
         self.cost = cost
 
     @property
-    def envir(self) -> Envir:
-        return self.accumulation.envir
+    def accumulation(self) -> Accumulation:
+        return Accumulation(self.envir)
 
     def __call__(
         self,
@@ -164,8 +165,10 @@ class Profits(AgentsFunction):
 
     # Internals ------------------------------------------------------------------------
 
-    def rescale_cost_rates(self, n_agents: int, envir: Envir) -> None:
+    def rescale_cost_rates(self, n_agents: int, envir: Envir | None = None) -> None:
         """Scale sustenance and harvesting cost rates."""
+        if envir is None:
+            envir = self.envir
         self.sustenance *= envir.r*envir.K / (4*n_agents)
         self.cost *= envir.K / (2*n_agents)
 
@@ -213,7 +216,7 @@ class Foresight(AgentsFunction):
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -236,7 +239,7 @@ class Foresight(AgentsFunction):
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -254,7 +257,7 @@ class Foresight(AgentsFunction):
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -282,7 +285,7 @@ class Foresight(AgentsFunction):
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -302,7 +305,7 @@ class Foresight(AgentsFunction):
             Time.
             Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -355,7 +358,7 @@ class Utility(AgentsFunction):
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -392,7 +395,7 @@ class Utility(AgentsFunction):
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -416,7 +419,7 @@ class Utility(AgentsFunction):
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """
@@ -436,7 +439,7 @@ class Utility(AgentsFunction):
             Time.
             Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
         """

@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 from gxr.typing import Float1D, FloatND
 from gxr.utils.array import ndgrid, make_arrays
-from gxr.envir.functions import Envir, Accumulation
+from gxr.envir.functions import Envir
 from gxr.envir.functions import Profits, Foresight, Utility
 from gxr.envir.functions.utility import UtilIdentity, UtilLinSqrt
 
@@ -42,26 +42,17 @@ def envir_tEh(envir_Eh, t) -> tuple[Envir, FloatND, FloatND, FloatND]:
     t = ndgrid(t, np.broadcast_arrays(E, h)[0])[0]
     return envir, t, E, h
 
-@pytest.fixture(scope="function")
-def accumulation_Eh(envir_Eh) -> tuple[Accumulation, FloatND, FloatND]:
-    envir, E0, h = envir_Eh
-    return Accumulation(envir), E0, h
-@pytest.fixture(scope="function")
-def accumulation_tEh(envir_tEh) -> tuple[Accumulation, FloatND, FloatND, FloatND]:
-    envir, t, E0, h = envir_tEh
-    return Accumulation(envir), t, E0, h
-
 @pytest.fixture(scope="function", params=list(product(
     [1, 4], [(0, 0), (0, .2), (.2, 0), (.2, .1)]
 )))
-def profits_EH(accumulation_Eh, request) -> tuple[Profits, FloatND, FloatND]:
-    accumulation, E0, h = accumulation_Eh
+def profits_EH(envir_Eh, request) -> tuple[Profits, FloatND, FloatND]:
+    envir, E0, h = envir_Eh
     n_agents, sc = request.param
     sustenance, cost = sc
     I = np.ones(n_agents)
     H = (h[None, ...].T * (I/I.size)).T
-    profits = Profits(accumulation, sustenance, cost)
-    profits.rescale_cost_rates(n_agents, accumulation.envir)
+    profits = Profits(envir, sustenance, cost)
+    profits.rescale_cost_rates(n_agents)
     return profits, E0, H
 @pytest.fixture(scope="function")
 def profits_tEH(profits_EH, t) -> tuple[Profits, FloatND, FloatND, FloatND]:

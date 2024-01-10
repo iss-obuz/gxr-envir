@@ -1,7 +1,7 @@
 """Environment model."""
 from typing import Any, Optional, Self
 import numpy as np
-from .functions import Envir, Accumulation, Profits, Foresight, Utility
+from .functions import Envir, Profits, Foresight, Utility
 from .functions.utility import UtilityFunction
 from ..typing import PathLike, Float1D
 from ..utils.array import make_arrays
@@ -167,9 +167,8 @@ class EnvirGame:
             envir["K"] *= n_agents
         envir = Envir(**{**numint_kws, **envir})
         profits = profits or {}
-        accum = Accumulation(envir, **numint_kws)
-        profits = Profits(accum, **profits, **numint_kws)
-        profits.rescale_cost_rates(n_agents, envir)
+        profits = Profits(envir, **profits, **numint_kws)
+        profits.rescale_cost_rates(n_agents)
         foresight = foresight or {}
         foresight = Foresight(profits, **foresight, **numint_kws)
         if utility and isinstance(utility, dict):
