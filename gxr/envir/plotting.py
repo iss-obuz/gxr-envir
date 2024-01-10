@@ -1,8 +1,9 @@
 from typing import Any, Optional
+import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from .game import EnvirGame
-from .dynamics import EnvirDynamics, Results
+from .dynamics import EnvirDynamics, EnvirDynamicsResults
 from ..typing import Figure, Axes, AxesGrid
 
 
@@ -21,7 +22,7 @@ class DynamicsPlotter:
     def __init__(
         self,
         dynamics: EnvirDynamics,
-        results: Results,
+        results: EnvirDynamicsResults,
         rc: Optional[dict] = None
     ) -> None:
         self.dynamics = dynamics
@@ -63,6 +64,8 @@ class DynamicsPlotter:
         title: str = r"Environment state",
         show_opt: bool | dict = True,
         show_Kh: bool | dict = False,
+        show_vicious: bool | dict = False,
+        show_perceived: bool | dict = False,
         **kwds: Any
     ) -> mpl.axes.Axes:
         """Plot environment state.
@@ -91,6 +94,16 @@ class DynamicsPlotter:
                 r, K = self.game.envir.get_params()
                 _, Kh = self.game.envir.adjust_params(r, K, h)
                 ax.plot(T, Kh, **kws)
+            if (kws := self._get_kws(show_vicious, {
+                "color": "red", "alpha": .25
+            })):
+                B0, B1 = self.dynamics.get_vicious_bounds(self.results)[index].T
+                ax.fill_between(T, B0, B1, **kws)
+            if (kws := self._get_kws(show_perceived, {
+                "alpha": .5, "ls": "--", "color": "gray",
+            })):
+                Ehat = self.results.Ehat[index]
+                ax.plot(T, Ehat, **{**kwds, **kws})
             ax.plot(T, E, **kwds)
             return ax
 

@@ -1,4 +1,5 @@
 from typing import Optional, Any, Union, Self, Iterable, Mapping
+from math import log
 from abc import ABC, abstractmethod
 import numpy as np
 from .game import EnvirGame
@@ -14,6 +15,10 @@ class Behavior:
     ----------
     game
         Environmental game instance.
+    delay
+        Number of characteristic timescales needed for the perceived state
+        at the level of carrying capacity update to ``K/10``.
+        Must be positive. Lower values indicate less delay.
     eta
         Adaptation rate.
     alpha
@@ -27,6 +32,7 @@ class Behavior:
         self,
         game: EnvirGame,
         *,
+        delay: float = 1,
         eta: float = .2,
         noise: float = 1.0,
         seed: Optional[int] = None,
@@ -41,6 +47,7 @@ class Behavior:
         """
         self.game = game
         self.rng = np.random.default_rng(seed)
+        self.delay = delay
         self.eta = eta
         self.noise = noise
         self.rules = [
@@ -80,6 +87,11 @@ class Behavior:
         if self.noise and self.noise > 0:
             dH += self.rng.normal(0, self.sigma, dH.shape)
         return np.clip(dH*self.adaptation_rate, -H, None)
+
+    def Ehat_deriv(self, E: float, Ehat: float) -> float:
+        """Get time derivative of the perceived environment state."""
+        coef = log(10) / (self.delay * self.envir.T_epsilon)
+        return coef * (E - Ehat)
 
 
 class BehaviorRule(ABC):

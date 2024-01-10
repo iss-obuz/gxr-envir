@@ -1,4 +1,5 @@
 from typing import Any, Optional
+from warnings import catch_warnings, filterwarnings
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
@@ -9,7 +10,7 @@ from .behavior import Behavior
 from ..typing import Float1D, Float2D
 
 
-class Results:
+class EnvirDynamicsResults:
     """Environmental dynamics simulation results.
 
     Attributes
@@ -35,9 +36,14 @@ class Results:
         return self.ode.y[0]
 
     @property
+    def Ehat(self) -> Float1D:
+        """Perceived states of the environment."""
+        return self.ode.y[1]
+
+    @property
     def P(self) -> Float2D:
         """Agents' profits over the time grid."""
-        return self.ode.y[1:self.n_agents+1]
+        return self.ode.y[2:2+self.n_agents]
 
     @property
     def H(self) -> Float2D:
@@ -94,7 +100,7 @@ class EnvirDynamics:
         ptol: Optional[float | tuple[float, float]] = None,
         htol: Optional[float | tuple[float, float]] = None,
         **kwds: Any
-    ) -> Results:
+    ) -> EnvirDynamicsResults:
         """Run environmental dynamics simulation by solving the ODE system.
 
         Parameters
@@ -135,19 +141,21 @@ class EnvirDynamics:
         ertol, eatol = self._get_tols(etol, tol)
         prtol, patol = self._get_tols(ptol, tol)
         hrtol, hatol = self._get_tols(htol, tol)
+        rtol = np.concatenate([
+            [ertol]*2,
+            np.full(self.n_agents, prtol),
+            np.full(self.n_agents, hrtol)
+        ])
+        atol = np.concatenate([
+            [eatol]*2,
+            np.full(self.n_agents, patol),
+            np.full(self.n_agents, hatol)
+        ])
         t_span = (0, t)
         sol = solve_ivp(self.ode, t_span, self.get_y0(), args=(pbar,), **{
             "method": "RK23",
-            "rtol": np.concatenate([
-                [ertol],
-                np.full(self.n_agents, prtol),
-                np.full(self.n_agents, hrtol)
-            ]),
-            "atol": np.concatenate([
-                [eatol],
-                np.full(self.n_agents, patol),
-                np.full(self.n_agents, hatol)
-            ]),
+            "rtol": rtol,
+            "atol": atol,
             **kwds
         })
         E = sol.y[0, -1]
@@ -157,7 +165,7 @@ class EnvirDynamics:
         self.game.P = P
         self.game.H = H
         pbar.close()
-        return Results(sol)
+        return EnvirDynamicsResults(sol)
 
     def ode(self, t: float, y: Float1D, pbar: Optional[TqdmPBar] = None) -> Float1D:
         """Dynamics represented as an ODE system.
@@ -165,21 +173,36 @@ class EnvirDynamics:
         The logic and signature of the method is compatible
         with the interface of the :func:`scipy.integrate.solve_ivp`.
         """
-        E = y[0]
-        P = y[1:self.n_agents+1]
-        H = y[-self.n_agents:]
-        dE = np.array([
+        E    = y[0]
+        Ehat = y[1]
+        P    = y[2:2+self.n_agents]
+        H    = y[-self.n_agents:]
+        dX   = np.array([
             self.game.envir.deriv(E, H.sum()),
+            self.behavior.Ehat_deriv(E, Ehat),
             *self.game.profits.deriv(E, H),
-            *self.behavior.dH(E, H, P)
+            *self.behavior.dH(Ehat, H, P)
         ])
         if pbar is not None and (deltat := t - pbar.n) > 0:
             pbar.update(deltat)
-        return dE
+        return dX
 
     def get_y0(self) -> Float1D:
         """Get initial state for ODE."""
-        return np.array([self.game.E, *self.game.P.copy(), *self.game.H.copy()])
+        E = self.game.E
+        return np.array([E, E, *self.game.P.copy(), *self.game.H.copy()])
+
+    def get_vicious_bounds(self, sol: EnvirDynamicsResults) -> Float2D:
+        """Get bounds of the vicious cycle region."""
+        h = sol.H.sum(axis=0)
+        with catch_warnings():
+            filterwarnings("ignore", "divide")
+            B = np.column_stack([
+                self.game.envir.K*(1 - h/self.game.envir.r),
+                self.n_agents*(self.game.profits.cost + self.game.profits.sustenance/h)
+            ])
+        B[B[:, 0] > B[:, 1]] = np.nan
+        return B
 
     # Iternals -------------------------------------------------------------------------
 
