@@ -180,8 +180,9 @@ class Foresight(AgentsFunction):
     ----------
     profits
         Profits function.
-    gamma
-        Time discount rate.
+    horizon
+        Width of the foresight expressed in terms of the number
+        of characteristic timescales of the environment.
     epsilon
         :math:`\epsilon`-threshold for determining
         the characteristic timescale of foresight.
@@ -189,13 +190,13 @@ class Foresight(AgentsFunction):
     def __init__(
         self,
         profits: Profits,
-        gamma: float = .8,
+        horizon: float = 1.0,
         epsilon: float = .01,
         **kwds: Any
     ) -> None:
         super().__init__(**kwds)
         self.profits = profits
-        self.gamma = gamma
+        self.horizon = horizon
         self.epsilon = epsilon
 
     @property
@@ -203,7 +204,13 @@ class Foresight(AgentsFunction):
         return self.profits.envir
 
     @property
+    def gamma(self) -> float:
+        """Foresight discount rate."""
+        return self.epsilon**(1/(self.horizon*self.envir.T_epsilon))
+
+    @property
     def tmax(self) -> float:
+        """Effective endpoint of the foresight time interval."""
         return np.log(self.epsilon) / np.log(self.gamma)
 
     def __call__(

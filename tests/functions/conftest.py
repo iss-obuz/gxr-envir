@@ -60,11 +60,11 @@ def profits_tEH(profits_EH, t) -> tuple[Profits, FloatND, FloatND, FloatND]:
     t = ndgrid(t, np.broadcast_arrays(E0, H[0])[0])[0]
     return profits, t, E0, H
 
-@pytest.fixture(scope="function", params=[.8, .5])
+@pytest.fixture(scope="function", params=[1, .5])
 def foresight_EH(profits_EH, request) -> tuple[Foresight, FloatND, FloatND]:
     profits, E0, H = profits_EH
-    gamma = request.param
-    foresight = Foresight(profits, gamma=gamma)
+    horizon = request.param
+    foresight = Foresight(profits, horizon=horizon)
     return foresight, E0, H
 
 @pytest.fixture(scope="function", params=[UtilIdentity(), UtilLinSqrt(1)])
