@@ -16,6 +16,7 @@ class Function(ABC):
     @classmethod
     def from_dict(cls, dct: Mapping) -> Self:
         """Construct from a mapping."""
+        dct = {"@factory": cls.__name__, **dct}
         return obj_from_dict(dct, package=cls.__module__)
 
 
@@ -172,18 +173,14 @@ class AgentsFunction(ModelFunction):
     def align_with_H(H: FloatND, *Xs: np.ndarray) -> tuple[np.ndarray, ...]:
         if not Xs:
             raise ValueError("no arrays to align")
-        H, *Xs = make_arrays(H, *Xs)
-        *Xs, _ = np.broadcast_arrays(*Xs, H[0])
-        n_dims = Xs[0].ndim - H[0].ndim
-        H = expand_dims(H, n_dims, axis=1)
-        return (*Xs, H)
-
-    @staticmethod
-    def align_agent_arrays(*Xs: np.ndarray) -> tuple[np.ndarray, ...]:
-        Xs = (np.moveaxis(np.atleast_1d(x), 0, -1) for x in Xs)
-        Xs = np.broadcast_arrays(*Xs)
-        Xs = (np.moveaxis(x, -1, 0) for x in Xs)
-        return Xs
+        _, *Xs = np.broadcast_arrays(H[0], *Xs)
+        H = np.broadcast_to(H, (len(H), *_.shape))
+        return (H, *Xs)
+        # H, *Xs = make_arrays(H, *Xs)
+        # *Xs, _ = np.broadcast_arrays(*Xs, H[0])
+        # n_dims = Xs[0].ndim - H[0].ndim
+        # H = expand_dims(H, n_dims, axis=1)
+        # return (*Xs, H)
 
     def _gradient(self, *args: Any, H: FloatND, **kwds) -> FloatND:
         pXt = self.tpartial(*args, H=H, **kwds)

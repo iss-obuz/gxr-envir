@@ -18,15 +18,12 @@ class Profits(AgentsFunction):
         Agent sustenance rate.
     cost
         Agent harvesting cost rate.
-    rKN
-        ``r``, ``K`` and ``N`` parameters for natural scaling
-        of sustenance and harvesting costs.
     """
     def __init__(
         self,
         envir: Envir,
-        sustenance: float = 0,
-        cost: float = 0,
+        sustenance: float = 0.0,
+        cost: float = 0.0,
         **kwds: Any
     ) -> None:
         super().__init__(**kwds)
@@ -48,16 +45,12 @@ class Profits(AgentsFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and individual harvesting rates.
-            ``E0`` has to be broadcastable with ``H.sum(axis=0)``,
-            which is expected to return overall harvesting rates
-            (sums over agents).
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be jointly broadcastable, and after the
+            broadcasting ``H.sum(axis=0)`` must return overall harvesting rate(s).
         """
-        t, E0, H = self.align_with_H(H, t, E0)
+        H, t, E0 = self.align_with_H(H, t, E0)
         A = self.accumulation(t, E0, H.sum(axis=0))
         V = H*A
         C = t*(H*self.cost + self.sustenance)
