@@ -32,29 +32,24 @@ class Accumulation(StateFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``h``.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable.
         """
-        T = np.array(t)
-        E0, h = np.broadcast_arrays(E0, h)
-        out = np.broadcast(T, E0, h)
+        t, E0, h = np.broadcast_arrays(t, E0, h)
         rh, Kh = self.envir.adjust_params(*self.envir.get_params(), h)
         with catch_warnings():
             filterwarnings("ignore", "overflow|invalid|divide")
             D = E0/Kh
             rh = rh.reshape(D.shape)
-            A = np.atleast_1d((Kh/rh*np.log(np.abs((1-D)*np.exp(-rh*T) + D)) + Kh*T))
+            A = np.atleast_1d((Kh/rh*np.log(np.abs((1-D)*np.exp(-rh*t) + D)) + Kh*t))
         mask = np.isclose(rh, 0, **self.limtol)
         if mask.any():
             r, K = self.envir.get_params()
             mask = np.broadcast_to(mask, A.shape)
-            limit = np.broadcast_to(K/r*np.log(np.abs(1 + E0/K*r*T)), A.shape)
+            limit = np.broadcast_to(K/r*np.log(np.abs(1 + E0/K*r*t)), A.shape)
             A[mask] = limit[mask]
-        return A.reshape(out.shape)
+        return A.reshape(t.shape)
 
     def tpartial(
         self,
@@ -66,12 +61,9 @@ class Accumulation(StateFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``h``.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable.
         """
         return self.envir(t, E0, h)
 
@@ -85,12 +77,9 @@ class Accumulation(StateFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``h``.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable.
         """
         t, E0, h = np.broadcast_arrays(t, E0, h)
         T = self.make_grid(0, t)
