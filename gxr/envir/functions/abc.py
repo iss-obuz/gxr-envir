@@ -108,11 +108,9 @@ class StateFunction(ModelFunction):
 
         Parameters
         ----------
-        t
-            Time.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable.
         """
         return np.stack([self.tpartial(t, E0, h), self.hpartial(t, E0, h)], axis=0)
 
@@ -126,16 +124,11 @@ class StateFunction(ModelFunction):
 
         Parameters
         ----------
-        t, h
-            Time and harvesting rates.
-            Must be of the same shape.
-        E0
-            Initial state.
-            Must be broadcastable with ``h``.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable.
         """
-        t, h = make_arrays(t, h)
-        if t.shape != h.shape:
-            raise ValueError("'t' and 'h' have to be of the same shape")
+        t, E0, h = np.broadcast_arrays(t, E0, h)
         dh = numderiv(h, t, axis=0)
         dX = self.tpartial(t, E0, h) + dh*self.hpartial(t, E0, h)
         return dX

@@ -59,30 +59,24 @@ class Envir(StateFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``h``.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate.
+            Must be jointly broadcastable.
         """
-        T = np.array(t)
-        E0, h = np.broadcast_arrays(E0, h)
-        out = np.broadcast(T, E0, h)
+        t, E0, h = np.broadcast_arrays(t, E0, h)
         rh, Kh = self.adjust_params(self.r, self.K, h)
         with catch_warnings():
             filterwarnings("ignore", "overflow|invalid|divide")
             D = (Kh-E0)/E0
             D = D.reshape(rh.shape)
-            E = np.atleast_1d(Kh / (1 + D*np.exp(-rh*T)))
+            E = np.atleast_1d(Kh / (1 + D*np.exp(-rh*t)))
         mask = np.isclose(rh, 0, **self.limtol)
         if mask.any():
-            mask = np.broadcast_to(mask, E.shape)
-            limit = np.atleast_1d(self.K/self.r / (T + self.K/(self.r*E0)))
+            limit = np.atleast_1d(self.K/self.r / (t + self.K/(self.r*E0)))
             if limit.ndim < E.ndim:
                 limit = limit[..., None]
             E[mask] = np.broadcast_to(limit, E.shape)[mask]
-        return E.reshape(out.shape)
+        return E.reshape(t.shape)
 
     def deriv(
         self,
@@ -110,12 +104,9 @@ class Envir(StateFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``h``.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable.
         """
         Et = self(t, E0, h)
         return self.deriv(Et, h)
@@ -130,26 +121,21 @@ class Envir(StateFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``h``.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable.
         """
-        T = np.array(t)
-        E0, h = np.broadcast_arrays(E0, h)
-        out = np.broadcast(T, E0, h)
+        t, E0, h = np.broadcast_arrays(t, E0, h)
         rh, Kh = self.adjust_params(self.r, self.K, h)
         D = (Kh-E0)/E0
         D = D.reshape(rh.shape)
         with catch_warnings():
             filterwarnings("ignore", "overflow|invalid|divide")
-            X   = np.exp(-rh*T)
+            X   = np.exp(-rh*t)
             L   = D*X
             L2  = (L+1)**2
             dE1 = -self.K/(self.r*(L+1))
-            dE2 = -Kh*T*L / L2
+            dE2 = -Kh*t*L / L2
             dE3 =  Kh*(self.K/(E0*self.r)*X) / L2
             dE = np.atleast_1d(dE1 + dE2 + dE3)
         mask = np.isclose(rh, 0, **self.limtol)
@@ -157,13 +143,13 @@ class Envir(StateFunction):
             mask = np.broadcast_to(mask, dE.shape)
             r = self.r
             K = self.K
-            num = -E0*K*T*(2*K+E0*r*T)
-            denom = 2*(K + E0*r*T)**2
+            num = -E0*K*t*(2*K+E0*r*t)
+            denom = 2*(K + E0*r*t)**2
             limit = np.atleast_1d(num / denom)
             if limit.ndim < dE.ndim:
                 limit = limit[..., None]
             dE[mask] = np.broadcast_to(limit, dE.shape)[mask]
-        return dE.reshape(out.shape)
+        return dE.reshape(t.shape)
 
     # Internals ------------------------------------------------------------------------
 
