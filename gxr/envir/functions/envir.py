@@ -9,7 +9,7 @@ from ...utils.array import make_arrays
 class Envir(StateFunction):
     r"""Environment function.
 
-    Parameters
+    Attributes
     ----------
     r
         Natural growth rate.
@@ -18,7 +18,15 @@ class Envir(StateFunction):
     epsilon
         :math:`\epsilon`-threshold for natural growth rate from timescale.
     """
-    def __init__(self, K: float, T: float, epsilon: float = .01, **kwds: Any) -> None:
+    _default_epsilon = .01
+
+    def __init__(
+        self,
+        K: float,
+        T: float,
+        epsilon: float = _default_epsilon,
+        **kwds: Any
+    ) -> None:
         """Initialization method.
 
         Parameters
@@ -170,7 +178,7 @@ class Envir(StateFunction):
         return r-h, (1-h/r)*K
 
     @staticmethod
-    def get_r_from_timescale(T: float, epsilon: float = .01) -> float:
+    def get_r_from_timescale(T: float, epsilon: float = _default_epsilon) -> float:
         r"""Get growth rate :math:`r` from the characteristic timescale
         :math:`T_{\epsilon}`.
         """
