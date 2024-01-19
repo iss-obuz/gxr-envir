@@ -129,12 +129,11 @@ class TestProfits(FunctionTester):
         profits, t, E0, H = profits_tEH
         E0 = E0.mean()
         t  = np.linspace(0, t.max(), 500)
-        H  = np.linspace(0, H.mean(axis=tuple(range(1, H.ndim))), 500)
-        H  = np.moveaxis(H, 0, -1)
-        P0 = profits(t[0], E0, H[..., 0])
-        Pt = profits(t[-1], E0, H[..., -1])
+        H  = np.linspace(0, H.mean(axis=tuple(range(H.ndim-1))), 500)
+        P0 = profits(t[0], E0, H[0])
+        Pt = profits(t[-1], E0, H[-1])
         dP = profits.tderiv(t, E0, H)
-        P  = P0 + np.trapz(dP, x=t, axis=1)
+        P  = P0 + np.trapz(dP, x=t[..., None], axis=0)
         assert np.allclose(P, Pt, **self.tol)
 
 
