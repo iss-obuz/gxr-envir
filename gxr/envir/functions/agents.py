@@ -213,8 +213,7 @@ class Foresight(AgentsFunction):
             Individual harvesting rates.
             ``H.sum(axis=0)`` must give overall rates.
         """
-        H = np.array(H)
-        E0, _ = np.broadcast_arrays(E0, H[0])
+        H, E0 = self.align_with_H(H, E0)
         T  = self.make_T(E0.shape)
         W  = self.make_W(T)
         Et = self.envir(T, E0, H.sum(axis=0))
