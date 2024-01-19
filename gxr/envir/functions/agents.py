@@ -211,6 +211,7 @@ class Foresight(AgentsFunction):
             Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         H = np.array(H)
         E0, _ = np.broadcast_arrays(E0, H[0])
@@ -234,6 +235,7 @@ class Foresight(AgentsFunction):
             Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         shape = (len(H), *np.broadcast(E0, H[0]).shape)
         return np.zeros(shape)
@@ -252,11 +254,12 @@ class Foresight(AgentsFunction):
             Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         H = np.array(H)
         E0, _ = np.broadcast_arrays(E0, H[0])
         T  = self.make_T(E0.shape)
-        T, E0, H = self.align_with_H(H, T, E0)
+        H, T, E0 = self.align_with_H(H, T, E0)
         W  = self.make_W(T)
         h  = H.sum(axis=0)
         Et  = self.envir(T, E0, h)
@@ -280,6 +283,7 @@ class Foresight(AgentsFunction):
             Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         return self._gradient(E0, H=H)
 
@@ -293,13 +297,10 @@ class Foresight(AgentsFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0
-            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
-        H
-            Individual harvesting rates.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
         return self._tderiv(t, H, E0, _time_dependent=False)
 
@@ -353,6 +354,7 @@ class Utility(AgentsFunction):
             Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         U = self.foresight(E0, H)
         if not self.func.is_identity:
@@ -372,6 +374,7 @@ class Utility(AgentsFunction):
             Initial state. Must be broadcasting with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         shape = (len(H), *np.broadcast(E0, H[0]).shape)
         return np.zeros(shape)
@@ -390,6 +393,7 @@ class Utility(AgentsFunction):
             Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         E0, _ = np.broadcast_arrays(E0, H[0])
         dFi, dFj = self.foresight.hpartial(E0, H)
@@ -414,6 +418,7 @@ class Utility(AgentsFunction):
             Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         return self._gradient(E0, H=H)
 
@@ -427,12 +432,9 @@ class Utility(AgentsFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0
-            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
-        H
-            Individual harvesting rates.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
         return self._tderiv(t, H, E0, _time_dependent=False)
