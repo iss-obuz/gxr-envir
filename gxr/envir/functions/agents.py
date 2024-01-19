@@ -47,11 +47,12 @@ class Profits(AgentsFunction):
         ----------
         t, E0, H
             Time, initial state of the environment and individual harvesting rates.
-            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
-            ``H.sum(axis=0)`` must give overall harvesting rate(s).
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        H, t, E0 = self.align_with_H(H, t, E0)
-        A = self.accumulation(t, E0, H.sum(axis=0))
+        h = self.make_h(H)
+        t, E0, H, h = np.broadcast_arrays(t, E0, H, h)
+        A = self.accumulation(t, E0, h)
         V = H*A
         C = t*(H*self.cost + self.sustenance)
         P = V - C
@@ -65,8 +66,9 @@ class Profits(AgentsFunction):
         E, H
             Environment states and individual harvesting rates.
             Must be broadcastable in the arguments' order.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        H, E = self.align_with_H(H, E)
+        E, H = np.broadcast_arrays(E, H)
         dP = H*(E - self.cost) - self.sustenance
         return dP
 
@@ -82,11 +84,12 @@ class Profits(AgentsFunction):
         ----------
         t, E0, H
             Time, initial state of the environment and individual harvesting rates.
-            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
-            ``H.sum(axis=0)`` must give overall harvesting rate(s).
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        H, t, E0 = self.align_with_H(H, t, E0)
-        dA = self.accumulation.tpartial(t, E0, H.sum(axis=0))
+        h = self.make_h(H)
+        t, E0, H, h = np.broadcast_arrays(t, E0, H, h)
+        dA = self.accumulation.tpartial(t, E0, h)
         dP = H*dA - H*self.cost - self.sustenance
         return dP
 
@@ -103,11 +106,11 @@ class Profits(AgentsFunction):
         ----------
         t, E0, H
             Time, initial state of the environment and individual harvesting rates.
-            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
-            ``H.sum(axis=0)`` must give overall harvesting rate(s).
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        H, t, E0 = self.align_with_H(H, t, E0)
-        h   = H.sum(axis=0)
+        h = self.make_h(H)
+        t, E0, H, h = np.broadcast_arrays(t, E0, H, h)
         A   = self.accumulation(t, E0, h)
         dA  = self.accumulation.hpartial(t, E0, h)
         dPj = H*dA
@@ -126,8 +129,8 @@ class Profits(AgentsFunction):
         ----------
         t, E0, H
             Time, initial state of the environment and individual harvesting rates.
-            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
-            ``H.sum(axis=0)`` must give overall harvesting rate(s).
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
         return self._gradient(t, E0, H=H)
 

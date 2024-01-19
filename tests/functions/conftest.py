@@ -50,9 +50,11 @@ def profits_EH(envir_Eh, request) -> tuple[Profits, FloatND, FloatND]:
     n_agents, sc = request.param
     sustenance, cost = sc
     I = np.ones(n_agents)
-    H = (h[None, ...].T * (I/I.size)).T
+    H = (h[..., None] * (I/I.size))
     profits = Profits(envir, sustenance, cost)
     profits.rescale_cost_rates(n_agents)
+    E0, _ = np.broadcast_arrays(E0, H[..., 0])
+    E0 = E0[..., None]
     return profits, E0, H
 @pytest.fixture(scope="function")
 def profits_tEH(profits_EH, t) -> tuple[Profits, FloatND, FloatND, FloatND]:

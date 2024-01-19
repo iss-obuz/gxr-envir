@@ -170,40 +170,37 @@ class AgentsFunction(ModelFunction):
     # Internals ------------------------------------------------------------------------
 
     @staticmethod
-    def align_with_H(H: FloatND, *Xs: np.ndarray) -> tuple[np.ndarray, ...]:
-        if not Xs:
-            raise ValueError("no arrays to align")
-        _, *Xs = np.broadcast_arrays(H[0], *Xs)
-        n_dims = _.ndim - H[0].ndim
-        H = expand_dims(H, n_dims, axis=1)
-        return (H, *Xs)
+    def make_h(H: FloatND) -> FloatND:
+        return np.broadcast_to(H.sum(axis=-1)[..., None], H.shape)
 
     def _gradient(self, *args: Any, H: FloatND, **kwds) -> FloatND:
         pXt = self.tpartial(*args, H=H, **kwds)
         pXhi, pXhj = self.hpartial(*args, H=H, **kwds)
-        n_agents = len(np.atleast_1d(H))
+        n_agents = np.atleast_1d(H).shape[-1]
         idx = np.arange(n_agents)
-        pXH = np.repeat(np.expand_dims(pXhj, 0), n_agents, axis=0)
-        pXH[idx, idx] = pXhi
-        return np.concatenate([pXt[:, None, ...], pXH], axis=1)
+        pXH = np.repeat(pXhj[..., None, :], n_agents, axis=-2)
+        pXH[..., idx, idx] = pXhi
+        gX = np.concatenate([pXt[..., None, :], pXH], axis=-2)
+        return gX
 
     def _tderiv(
         self,
         t: float | FloatND,
-        H: float | FloatND = 0,
+        H: float | FloatND = 0.0,
         *args: Any,
         _time_dependent: bool = True,
         **kwds: Any
     ) ->  float | FloatND:
         """Time path derivative."""
         t, H = make_arrays(t, H)
-        if t.shape != H[0].shape:
-            raise ValueError("'t' and 'H[0]' have to be of the same shape")
-        dH  = numderiv(H, t[None, ...], axis=1)
-        dh  = dH.sum(axis=0)
+        if t.shape != H[..., 0].shape:
+            raise ValueError("'t' and 'H[..., 0]' have to be of the same shape")
+        t = t[..., None]
+        dH  = numderiv(H, t, axis=0)
+        dh  = dH.sum(axis=-1)
         if _time_dependent:
             args = (t, *args)
         pXt = self.tpartial(*args, H=H, **kwds)
         pXhi, pXhj = self.hpartial(*args, H=H, **kwds)
-        dP = pXt + dH*pXhi + (dh-dH)*pXhj
+        dP = pXt + dH*pXhi + (dh[..., None]-dH)*pXhj
         return dP
