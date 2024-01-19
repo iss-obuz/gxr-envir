@@ -174,13 +174,9 @@ class AgentsFunction(ModelFunction):
         if not Xs:
             raise ValueError("no arrays to align")
         _, *Xs = np.broadcast_arrays(H[0], *Xs)
-        H = np.broadcast_to(H, (len(H), *_.shape))
+        n_dims = _.ndim - H[0].ndim
+        H = expand_dims(H, n_dims, axis=1)
         return (H, *Xs)
-        # H, *Xs = make_arrays(H, *Xs)
-        # *Xs, _ = np.broadcast_arrays(*Xs, H[0])
-        # n_dims = Xs[0].ndim - H[0].ndim
-        # H = expand_dims(H, n_dims, axis=1)
-        # return (*Xs, H)
 
     def _gradient(self, *args: Any, H: FloatND, **kwds) -> FloatND:
         pXt = self.tpartial(*args, H=H, **kwds)

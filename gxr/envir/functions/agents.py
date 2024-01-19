@@ -47,8 +47,8 @@ class Profits(AgentsFunction):
         ----------
         t, E0, H
             Time, initial state of the environment and individual harvesting rates.
-            ``t``, ``E0`` and ``H[0]`` must be jointly broadcastable, and after the
-            broadcasting ``H.sum(axis=0)`` must return overall harvesting rate(s).
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
         H, t, E0 = self.align_with_H(H, t, E0)
         A = self.accumulation(t, E0, H.sum(axis=0))
@@ -64,9 +64,9 @@ class Profits(AgentsFunction):
         ----------
         E, H
             Environment states and individual harvesting rates.
-            Must be mutually broadcastable.
+            Must be broadcastable in the arguments' order.
         """
-        E, H = self.align_with_H(H, E)
+        H, E = self.align_with_H(H, E)
         dP = H*(E - self.cost) - self.sustenance
         return dP
 
@@ -80,14 +80,12 @@ class Profits(AgentsFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
-        t, E0, H = self.align_with_H(H, t, E0)
+        H, t, E0 = self.align_with_H(H, t, E0)
         dA = self.accumulation.tpartial(t, E0, H.sum(axis=0))
         dP = H*dA - H*self.cost - self.sustenance
         return dP
@@ -103,14 +101,12 @@ class Profits(AgentsFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
-        t, E0, H = self.align_with_H(H, t, E0)
+        H, t, E0 = self.align_with_H(H, t, E0)
         h   = H.sum(axis=0)
         A   = self.accumulation(t, E0, h)
         dA  = self.accumulation.hpartial(t, E0, h)
@@ -128,12 +124,10 @@ class Profits(AgentsFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
         return self._gradient(t, E0, H=H)
 
@@ -147,12 +141,10 @@ class Profits(AgentsFunction):
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
         return self._tderiv(t, H, E0, _time_dependent=True)
 
