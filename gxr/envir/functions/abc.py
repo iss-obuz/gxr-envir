@@ -111,7 +111,7 @@ class StateFunction(ModelFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         return np.stack([self.tpartial(t, E0, h), self.hpartial(t, E0, h)], axis=0)
 
@@ -127,7 +127,7 @@ class StateFunction(ModelFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         t, E0, h = np.broadcast_arrays(t, E0, h)
         dh = numderiv(h, t, axis=0)

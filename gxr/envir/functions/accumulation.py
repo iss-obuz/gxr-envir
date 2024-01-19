@@ -34,7 +34,7 @@ class Accumulation(StateFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         t, E0, h = np.broadcast_arrays(t, E0, h)
         rh, Kh = self.envir.adjust_params(*self.envir.get_params(), h)
@@ -63,7 +63,7 @@ class Accumulation(StateFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         return self.envir(t, E0, h)
 
@@ -79,10 +79,10 @@ class Accumulation(StateFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         t, E0, h = np.broadcast_arrays(t, E0, h)
         T = self.make_grid(0, t)
         dE = self.envir.hpartial(T, E0, h)
-        dA = np.trapz(dE.T, x=T.T, axis=-1).T
+        dA = np.trapz(dE, x=T, axis=0)
         return dA

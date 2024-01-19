@@ -61,7 +61,7 @@ class Envir(StateFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate.
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         t, E0, h = np.broadcast_arrays(t, E0, h)
         rh, Kh = self.adjust_params(self.r, self.K, h)
@@ -89,7 +89,7 @@ class Envir(StateFunction):
         ----------
         E0, h
             Initial state and harvesting rate.
-            Must be mutually broadcastable.
+            Must be jointly broadcastable in ``E0, h`` order.
         """
         E, h = np.broadcast_arrays(E, h)
         return self.r*E*(1-E/self.K) - h*E
@@ -106,7 +106,7 @@ class Envir(StateFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         Et = self(t, E0, h)
         return self.deriv(Et, h)
@@ -123,7 +123,7 @@ class Envir(StateFunction):
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable.
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         t, E0, h = np.broadcast_arrays(t, E0, h)
         rh, Kh = self.adjust_params(self.r, self.K, h)
