@@ -148,7 +148,7 @@ class TestForesight(FunctionTester):
     ) -> None:
         foresight, E0, H = foresight_EH
         F = foresight(E0, H)
-        shape = (len(H), *np.broadcast(E0, H[0]).shape)
+        shape = self.make_agent_shape(H, E0)
         assert F.shape == shape
 
     def test_tpartial_broadcasting(
@@ -175,8 +175,9 @@ class TestForesight(FunctionTester):
     ) -> None:
         foresight, E0, H = foresight_EH
         gF = foresight.gradient(E0, H)
-        n_agents = len(H)
-        shape = (n_agents, 1+n_agents, *np.broadcast(E0, H[0]).shape)
+        n_agents = H.shape[-1]
+        shape = self.make_agent_shape(H, E0)
+        shape = (*shape[:-1], n_agents+1, shape[-1])
         assert gF.shape == shape
 
     def test_gradient_integration(
