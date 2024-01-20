@@ -49,12 +49,7 @@ class Envir(StateFunction):
         """Characteristic timescale."""
         return -2/self.r*np.log(self.epsilon / (1-self.epsilon))
 
-    def __call__(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def __call__(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Environment state.
 
         Parameters
@@ -78,11 +73,7 @@ class Envir(StateFunction):
             E[mask] = np.broadcast_to(limit, E.shape)[mask]
         return E.reshape(t.shape)
 
-    def deriv(
-        self,
-        E: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def deriv(self, E: FloatND, h: FloatND = 0) -> FloatND:
         """Implicit time derivative for solving ODEs.
 
         Parameters
@@ -94,12 +85,7 @@ class Envir(StateFunction):
         E, h = np.broadcast_arrays(E, h)
         return self.r*E*(1-E/self.K) - h*E
 
-    def tpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def tpartial(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
@@ -111,12 +97,7 @@ class Envir(StateFunction):
         Et = self(t, E0, h)
         return self.deriv(Et, h)
 
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def hpartial(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Partial derivative with respect to harvesting rate.
 
         Parameters

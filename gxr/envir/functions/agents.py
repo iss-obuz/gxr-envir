@@ -35,12 +35,7 @@ class Profits(AgentsFunction):
     def accumulation(self) -> Accumulation:
         return Accumulation(self.envir)
 
-    def __call__(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: FloatND
-    ) -> float | FloatND:
+    def __call__(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Profits.
 
         Parameters
@@ -58,7 +53,7 @@ class Profits(AgentsFunction):
         P = V - C
         return P
 
-    def deriv(self, E: float | FloatND, H: FloatND) -> FloatND:
+    def deriv(self, E: FloatND, H: FloatND) -> FloatND:
         """Implicit time derivative for solving ODEs.
 
         Parameters
@@ -72,12 +67,7 @@ class Profits(AgentsFunction):
         dP = H*(E - self.cost) - self.sustenance
         return dP
 
-    def tpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> FloatND:
+    def tpartial(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
@@ -93,12 +83,7 @@ class Profits(AgentsFunction):
         dP = H*dA - H*self.cost - self.sustenance
         return dP
 
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND,
-    ) -> tuple[FloatND, FloatND]:
+    def hpartial(self, t: FloatND, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect to agents' own harvesting rates
         and harvesting rates of another agent.
 
@@ -117,12 +102,7 @@ class Profits(AgentsFunction):
         dPi = dPj + A - self.cost*t
         return dPi, dPj
 
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND,
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Gradient.
 
         Parameters
@@ -134,12 +114,7 @@ class Profits(AgentsFunction):
         """
         return self._gradient(t, E0, H=H)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND,
-    ) -> FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.
 
         Parameters
@@ -201,34 +176,27 @@ class Foresight(AgentsFunction):
         """Effective endpoint of the foresight time interval."""
         return np.log(self.epsilon) / np.log(self.gamma)
 
-    def __call__(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def __call__(self, E0: FloatND, H: FloatND) -> FloatND:
         """Foresight function.
 
         Parameters
         ----------
-        E0
-            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
-        H
-            Individual harvesting rates.
-            ``H.sum(axis=0)`` must give overall rates.
+        E0, H
+            Initial state of the environment and individual harvesting rates.
+            ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        H, E0 = self.align_with_H(H, E0)
+        h = self.make_h(H)
+        E0, H, h = np.broadcast_arrays(E0, H, h)
         T  = self.make_T(E0.shape)
         W  = self.make_W(T)
-        Et = self.envir(T, E0, H.sum(axis=0))
+        Et = self.envir(T, E0, h)
         dP = self.profits.deriv(Et, H)
-        F  = np.trapz(W*dP, x=T[None, ...], axis=1)
+        F  = np.trapz(W*dP, x=T, axis=0)
+        1/0
         return F
 
-    def tpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def tpartial(self, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
@@ -242,11 +210,7 @@ class Foresight(AgentsFunction):
         shape = (len(H), *np.broadcast(E0, H[0]).shape)
         return np.zeros(shape)
 
-    def hpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> tuple[FloatND, FloatND]:
+    def hpartial(self, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect to agents' own harvesting rates
         and harvesting rates of another agent.
 
@@ -272,11 +236,7 @@ class Foresight(AgentsFunction):
         dFj = np.trapz(W*dFj, x=T[None, ...], axis=1)
         return dFi, dFj
 
-    def gradient(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def gradient(self, E0: FloatND, H: FloatND) -> FloatND:
         """Gradient.
 
         Parameters
@@ -289,12 +249,7 @@ class Foresight(AgentsFunction):
         """
         return self._gradient(E0, H=H)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.
 
         Parameters
@@ -343,11 +298,7 @@ class Utility(AgentsFunction):
     def envir(self) -> Envir:
         return self.foresight.envir
 
-    def __call__(
-        self,
-        E0: float | FloatND,
-        H: FloatND
-    ) -> FloatND:
+    def __call__(self, E0: FloatND, H: FloatND) -> FloatND:
         """Agent utility function.
 
         Parameters
@@ -363,11 +314,7 @@ class Utility(AgentsFunction):
             U = self.func(U)
         return U
 
-    def tpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def tpartial(self, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
@@ -381,11 +328,7 @@ class Utility(AgentsFunction):
         shape = (len(H), *np.broadcast(E0, H[0]).shape)
         return np.zeros(shape)
 
-    def hpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> tuple[FloatND, FloatND]:
+    def hpartial(self, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect agents' own harvesting rates
         and harvesting rates of another agent.
 
@@ -406,11 +349,7 @@ class Utility(AgentsFunction):
             dFj *= dU
         return dFi, dFj
 
-    def gradient(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def gradient(self, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivatives with respect agents' own harvesting rates
         and harvesting rates of another agent.
 
@@ -424,12 +363,7 @@ class Utility(AgentsFunction):
         """
         return self._gradient(E0, H=H)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.
 
         Parameters

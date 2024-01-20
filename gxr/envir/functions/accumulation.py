@@ -22,12 +22,7 @@ class Accumulation(StateFunction):
         super().__init__(**kwds)
         self.envir = envir
 
-    def __call__(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def __call__(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Accumulated environment state.
 
         Parameters
@@ -51,12 +46,7 @@ class Accumulation(StateFunction):
             A[mask] = limit[mask]
         return A.reshape(t.shape)
 
-    def tpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND
-    ) -> float | FloatND:
+    def tpartial(self, t: FloatND, E0: FloatND, h: FloatND) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
@@ -67,12 +57,7 @@ class Accumulation(StateFunction):
         """
         return self.envir(t, E0, h)
 
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND
-    ) -> float | FloatND:
+    def hpartial(self, t: FloatND, E0: FloatND, h: FloatND) -> FloatND:
         """Partial derivative with respect to harvesting rate.
 
         Parameters
