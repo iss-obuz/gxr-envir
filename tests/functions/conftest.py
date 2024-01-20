@@ -88,3 +88,10 @@ class FunctionTester:
         if isinstance(T, np.ndarray) and T.size > 1:
             return T.min(), T.max()
         return 0, T*1
+
+    @staticmethod
+    def make_agent_shape(H: FloatND, *args: FloatND) -> tuple[int, ...]:
+        shape = np.broadcast(*args, H).shape
+        if H.size == 1 and any(x.size > 1 for x in args):
+            shape = (*shape, 1)
+        return shape

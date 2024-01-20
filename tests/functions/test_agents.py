@@ -14,8 +14,8 @@ class TestProfits(FunctionTester):
     ) -> None:
         profits, t, E0, H = profits_tEH
         P = profits(t, E0, H)
-        shape = np.broadcast(t, E0, H[..., 0]).shape
-        assert P.shape == shape or (1,)
+        shape = self.make_agent_shape(H, t, E0)
+        assert P.shape == shape
 
     def test_deriv_broadcasting(
         self,
@@ -23,8 +23,8 @@ class TestProfits(FunctionTester):
     ) -> None:
         profits, _, E0, H = profits_tEH
         dP = profits.deriv(E0, H)
-        shape = np.broadcast(E0, H[..., 0]).shape
-        assert dP.shape == shape or (1,)
+        shape = self.make_agent_shape(H, E0)
+        assert dP.shape == shape
 
     def test_ode(
         self,
@@ -57,8 +57,8 @@ class TestProfits(FunctionTester):
     ) -> None:
         profits, t, E0, H = profits_tEH
         dP = profits.tpartial(t, E0, H)
-        shape = np.broadcast(t, E0, H[0]).shape
-        assert dP.shape == shape or (1,)
+        shape = self.make_agent_shape(H, t, E0)
+        assert dP.shape == shape
 
     def test_tpartial_integration(
         self,
@@ -70,6 +70,8 @@ class TestProfits(FunctionTester):
         dP = profits.tpartial(T, E0, H)
         P0 = profits(T[0], E0, H)
         Pt = profits(T[-1], E0, H)
+        if T.ndim < dP.ndim:
+            T = T[..., None]
         P  = P0 + np.trapz(dP, x=T, axis=0)
         assert np.allclose(P, Pt, **self.tol)
 
@@ -79,8 +81,8 @@ class TestProfits(FunctionTester):
     ) -> None:
         profits, t, E0, H = profits_tEH
         dPi, dPj = profits.hpartial(t, E0, H)
-        shape = np.broadcast(t, E0, H[0]).shape
-        assert dPi.shape == dPj.shape == shape or (1,)
+        shape = self.make_agent_shape(H, t, E0)
+        assert dPi.shape == dPj.shape == shape
 
     def test_gradient_broadcasting(
         self,
@@ -89,8 +91,8 @@ class TestProfits(FunctionTester):
         profits, t, E0, H = profits_tEH
         gP = profits.gradient(t, E0, H)
         n_agents = H.shape[-1]
-        shape = np.broadcast(t, E0).shape
-        shape = (*shape[:-1], n_agents+1, n_agents)
+        shape = self.make_agent_shape(H, t, E0)
+        shape = (*shape[:-1], n_agents+1, shape[-1])
         assert gP.shape == shape
 
     def test_gradient_integration(
@@ -116,10 +118,11 @@ class TestProfits(FunctionTester):
     ) -> None:
         profits, t, E0, H = profits_tEH
         E0 = E0.mean()
+        H  = H.mean(axis=tuple(range(H.ndim-1)))
         t  = np.linspace(0, t.max(), 10)
-        H  = np.linspace(0, H.mean(axis=tuple(range(H.ndim-1))), 10)
-        dP = profits.tderiv(t, E0, H)
-        shape = (*np.broadcast(t, E0).shape, H.shape[-1])
+        Hgrid  = np.linspace(0, H, 10)
+        dP = profits.tderiv(t, E0, Hgrid)
+        shape = (t.size, H.size)
         assert dP.shape == shape
 
     def test_tderiv_integration(

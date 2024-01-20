@@ -45,8 +45,7 @@ class Profits(AgentsFunction):
             ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
             ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        h = self.make_h(H)
-        t, E0, H, h = np.broadcast_arrays(t, E0, H, h)
+        t, E0, H, h = self.prepare_data(H, t, E0)
         A = self.accumulation(t, E0, h)
         V = H*A
         C = t*(H*self.cost + self.sustenance)
@@ -63,7 +62,7 @@ class Profits(AgentsFunction):
             Must be broadcastable in the arguments' order.
             ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        E, H = np.broadcast_arrays(E, H)
+        E, H = self.prepare_data(H, E, h=False)
         dP = H*(E - self.cost) - self.sustenance
         return dP
 
@@ -77,8 +76,7 @@ class Profits(AgentsFunction):
             ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
             ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        h = self.make_h(H)
-        t, E0, H, h = np.broadcast_arrays(t, E0, H, h)
+        t, E0, H, h = self.prepare_data(H, t, E0)
         dA = self.accumulation.tpartial(t, E0, h)
         dP = H*dA - H*self.cost - self.sustenance
         return dP
@@ -94,8 +92,7 @@ class Profits(AgentsFunction):
             ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
             ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        h = self.make_h(H)
-        t, E0, H, h = np.broadcast_arrays(t, E0, H, h)
+        t, E0, H, h = self.prepare_data(H, t, E0)
         A   = self.accumulation(t, E0, h)
         dA  = self.accumulation.hpartial(t, E0, h)
         dPj = H*dA
@@ -122,7 +119,8 @@ class Profits(AgentsFunction):
         t, E0, H
             Time, initial state of the environment and individual harvesting rates.
             ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
-            ``H.sum(axis=0)`` must give overall harvesting rate(s).
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
+            Moreover, ``t`` and ``H[..., 0]`` must be of the same shape.
         """
         return self._tderiv(t, H, E0, _time_dependent=True)
 

@@ -53,39 +53,19 @@ class ModelFunction(Function):
         self.numint_max_steps = numint_max_steps
 
     @abstractmethod
-    def tpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def tpartial(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Partial derivative with respect to time."""
 
     @abstractmethod
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def hpartial(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Partial derivative with respect to harvesting rate."""
 
     @abstractmethod
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Gradient."""
 
     @abstractmethod
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) ->  float | FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, h: FloatND = 0) ->  FloatND:
         """Time path derivative."""
 
     def make_grid(self, start: FloatND, stop: FloatND, **kwds: Any) -> FloatND:
@@ -99,12 +79,7 @@ class ModelFunction(Function):
 class StateFunction(ModelFunction):
     """Generic global state function."""
 
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Gradient.
 
         Parameters
@@ -115,20 +90,19 @@ class StateFunction(ModelFunction):
         """
         return np.stack([self.tpartial(t, E0, h), self.hpartial(t, E0, h)], axis=0)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) ->  float | FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, h: FloatND = 0) ->  FloatND:
         """Time path derivative.
 
         Parameters
         ----------
         t, E0, h
             Time, initial state of the environment and harvesting rate(s).
-            Must be jointly broadcastable in ``t, E0, h`` order.
+            Must be jointly broadcastable in ``t, E0, h`` order
+            and ``t`` and ``h`` must be of the same shape.
         """
+        t, E0, h = make_arrays(t, E0, h)
+        if t.shape != h.shape:
+            raise ValueError("'t' and 'h' must be of the same shape")
         t, E0, h = np.broadcast_arrays(t, E0, h)
         dh = numderiv(h, t, axis=0)
         dX = self.tpartial(t, E0, h) + dh*self.hpartial(t, E0, h)
@@ -139,39 +113,37 @@ class AgentsFunction(ModelFunction):
     """Generic agents state function."""
 
     @abstractmethod
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: FloatND
-    ) -> tuple[FloatND, FloatND]:
+    def hpartial(self, t: FloatND, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect agents' own harvesting rates
         and harvesting rates of another agent.
         """
 
     @abstractmethod
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND = 0
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, H: FloatND = 0) -> FloatND:
         """Gradient."""
 
     @abstractmethod
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND = 0
-    ) -> float | FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND = 0) -> FloatND:
         """Time path derivative."""
 
     # Internals ------------------------------------------------------------------------
 
     @staticmethod
-    def make_h(H: FloatND) -> FloatND:
-        return np.broadcast_to(H.sum(axis=-1)[..., None], H.shape)
+    def prepare_data(H: FloatND, *args: FloatND, h: bool = True) -> tuple[FloatND, ...]:
+        H = np.atleast_2d(H)
+        args = make_arrays(*args)
+        is_multiparam_single = H.size == 1 and any(x.size > 1 for x in args)
+        *args, H = np.broadcast_arrays(*args, H)
+        args = (*args, H)
+        if h:
+            args = (*args, np.broadcast_to(H.sum(axis=-1)[..., None], H.shape))
+        args = tuple(
+            x.squeeze(axis=0) if x.ndim == 2 and x.shape[0] == 1 else x
+            for x in args
+        )
+        if is_multiparam_single:
+            args = (x[..., None] for x in args)
+        return args
 
     def _gradient(self, *args: Any, H: FloatND, **kwds) -> FloatND:
         pXt = self.tpartial(*args, H=H, **kwds)
