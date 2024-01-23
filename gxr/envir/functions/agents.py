@@ -243,7 +243,7 @@ class Foresight(AgentsFunction):
             Individual harvesting rates.
             ``H.sum(axis=0)`` must give overall rates.
         """
-        return self._gradient(E0, H=H)
+        return self._gradient(E0, H=H, _time_dependent=False)
 
     def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.
@@ -324,8 +324,8 @@ class Utility(AgentsFunction):
             Individual harvesting rates.
             ``H.sum(axis=0)`` must give overall rates.
         """
-        shape = (len(H), *np.broadcast(E0, H[0]).shape)
-        return np.zeros(shape)
+        E0, _ = self.prepare_data(H, E0, h=False)
+        return np.zeros(E0.shape)
 
     def hpartial(self, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect agents' own harvesting rates
@@ -360,7 +360,7 @@ class Utility(AgentsFunction):
             Individual harvesting rates.
             ``H.sum(axis=0)`` must give overall rates.
         """
-        return self._gradient(E0, H=H)
+        return self._gradient(E0, H=H, _time_dependent=False)
 
     def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.

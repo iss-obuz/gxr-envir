@@ -177,7 +177,7 @@ class TestForesight(FunctionTester):
         gF = foresight.gradient(E0, H)
         n_agents = H.shape[-1]
         shape = self.make_agent_shape(H, E0)
-        shape = (*shape[:-1], n_agents+1, shape[-1])
+        shape = (*shape[:-1], n_agents, shape[-1])
         assert gF.shape == shape
 
     def test_gradient_integration(
@@ -187,15 +187,14 @@ class TestForesight(FunctionTester):
         foresight, E0, H = foresight_EH
         E0 = E0.mean()
         ng = 20
-        H, dH = np.linspace(0, H.mean(axis=tuple(range(1, H.ndim))), ng, retstep=True)
-        H  = np.moveaxis(H, 0, -1)
+        H, dH = np.linspace(0, H.mean(axis=tuple(range(H.ndim-1))), ng, retstep=True)
         D  = np.array([*dH])
-        F0 = foresight(E0, H[..., 0])
-        Ft = foresight(E0, H[..., -1])
+        F0 = foresight(E0, H[0])
+        Ft = foresight(E0, H[-1])
         gF = foresight.gradient(E0, H)
-        dF = (D*gF.T).T
-        dF = (dF[..., :-1] + dF[..., 1:]) / 2
-        F  = F0 + dF.sum(axis=(1, -1))
+        dF = D*gF
+        dF = (dF[:-1] + dF[1:]) / 2
+        F  = F0 + dF.sum(axis=tuple(range(dF.ndim-1)))
         assert np.allclose(F, Ft, **self.tol)
 
     def test_tderiv_broadcasting(
@@ -206,10 +205,9 @@ class TestForesight(FunctionTester):
         E0 = E0.mean()
         ng = 5
         t  = np.linspace(0, 10, ng)
-        H  = np.linspace(0, H.mean(axis=tuple(range(1, H.ndim))), ng)
-        H  = np.moveaxis(H, 0, -1)
+        H  = np.linspace(0, H.mean(axis=tuple(range(H.ndim-1))), ng)
         dF = foresight.tderiv(t, E0, H)
-        shape = (len(H), *np.broadcast(t, E0, H[0]).shape)
+        shape = (*np.broadcast(t, E0).shape, H.shape[-1])
         assert dF.shape == shape
 
     def test_tderiv_integration(
@@ -219,15 +217,14 @@ class TestForesight(FunctionTester):
         foresight, E0, H = foresight_EH
         E0 = E0.mean()
         if H.ndim > 1:
-            H = H.mean(axis=tuple(range(1, H.ndim)))
+            H = H.mean(axis=tuple(range(H.ndim-1)))
         ng = 20
         t  = np.linspace(0, 10, ng)
         H  = np.linspace(0, H, ng)
-        H  = np.moveaxis(H, 0, -1)
-        F0 = foresight(E0, H[..., 0])
-        Ft = foresight(E0, H[..., -1])
+        F0 = foresight(E0, H[0])
+        Ft = foresight(E0, H[-1])
         dF = foresight.tderiv(t, E0, H)
-        F  = F0 + np.trapz(dF, x=t, axis=1)
+        F  = F0 + np.trapz(dF, x=t[..., None], axis=0)
         assert np.allclose(F, Ft, **self.tol)
 
 
@@ -239,7 +236,7 @@ class TestUtility(FunctionTester):
     ) -> None:
         utility, E0, H = utility_EH
         U = utility(E0, H)
-        shape = (len(H), *np.broadcast(E0, H[0]).shape)
+        shape = self.make_agent_shape(H, E0)
         assert U.shape == shape
 
     def test_tpartial_broadcasting(
@@ -266,8 +263,9 @@ class TestUtility(FunctionTester):
     ) -> None:
         utility, E0, H = utility_EH
         gU = utility.gradient(E0, H)
-        n_agents = len(H)
-        shape = (n_agents, 1+n_agents, *np.broadcast(E0, H[0]).shape)
+        n_agents = H.shape[-1]
+        shape = self.make_agent_shape(H, E0)
+        shape = (*shape[:-1], n_agents, shape[-1])
         assert gU.shape == shape
 
     def test_gradient_integration(
@@ -277,15 +275,14 @@ class TestUtility(FunctionTester):
         utility, E0, H = utility_EH
         E0 = E0.mean()
         ng = 25
-        H, dH = np.linspace(0, H.mean(axis=tuple(range(1, H.ndim))), ng, retstep=True)
-        H  = np.moveaxis(H, 0, -1)
+        H, dH = np.linspace(0, H.mean(axis=tuple(range(H.ndim-1))), ng, retstep=True)
         D  = np.array([*dH])
-        U0 = utility(E0, H[..., 0])
-        Ut = utility(E0, H[..., -1])
+        U0 = utility(E0, H[0])
+        Ut = utility(E0, H[-1])
         gU = utility.gradient(E0, H)
-        dU = (D*gU.T).T
-        dU = (dU[..., :-1] + dU[..., 1:]) / 2
-        U  = U0 + dU.sum(axis=(1, -1))
+        dU = D*gU
+        dU = (dU[:-1] + dU[1:]) / 2
+        U  = U0 + dU.sum(axis=tuple(range(dU.ndim-1)))
         assert np.allclose(U, Ut, **self.tol)
 
     def test_tderiv_broadcasting(
@@ -296,10 +293,9 @@ class TestUtility(FunctionTester):
         E0 = E0.mean()
         ng = 5
         t  = np.linspace(0, 10, ng)
-        H  = np.linspace(0, H.mean(axis=tuple(range(1, H.ndim))), ng)
-        H  = np.moveaxis(H, 0, -1)
+        H  = np.linspace(0, H.mean(axis=tuple(range(H.ndim-1))), ng)
         dU = utility.tderiv(t, E0, H)
-        shape = (len(H), *np.broadcast(t, E0, H[0]).shape)
+        shape = (*np.broadcast(t, E0).shape, H.shape[-1])
         assert dU.shape == shape
 
     def test_tderiv_integration(
@@ -309,13 +305,12 @@ class TestUtility(FunctionTester):
         utility, E0, H = utility_EH
         E0 = E0.mean()
         if H.ndim > 1:
-            H = H.mean(axis=(tuple(range(1, H.ndim))))
+            H = H.mean(axis=(tuple(range(H.ndim-1))))
         ng = 25
         t  = np.linspace(0, 10, ng)
-        H  = np.linspace(0, H.mean(axis=tuple(range(1, H.ndim))), ng)
-        H  = np.moveaxis(H, 0, -1)
-        U0 = utility(E0, H[..., 0])
-        Ut = utility(E0, H[..., -1])
+        H  = np.linspace(0, H.mean(axis=tuple(range(H.ndim-1))), ng)
+        U0 = utility(E0, H[0])
+        Ut = utility(E0, H[-1])
         dU = utility.tderiv(t, E0, H)
-        U  = U0 + np.trapz(dU, x=t, axis=1)
+        U  = U0 + np.trapz(dU, x=t[..., None], axis=0)
         assert np.allclose(U, Ut, **self.tol)

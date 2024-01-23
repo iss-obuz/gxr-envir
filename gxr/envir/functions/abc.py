@@ -145,7 +145,13 @@ class AgentsFunction(ModelFunction):
             args = (x[..., None] for x in args)
         return args
 
-    def _gradient(self, *args: Any, H: FloatND, **kwds) -> FloatND:
+    def _gradient(
+        self,
+        *args: Any,
+        H: FloatND,
+        _time_dependent: bool = True,
+        **kwds: Any
+    ) -> FloatND:
         pXt = self.tpartial(*args, H=H, **kwds)
         pXhi, pXhj = self.hpartial(*args, H=H, **kwds)
         n_agents = np.atleast_1d(H).shape[-1]
@@ -153,6 +159,8 @@ class AgentsFunction(ModelFunction):
         pXH = np.repeat(pXhj[..., None, :], n_agents, axis=-2)
         pXH[..., idx, idx] = pXhi
         gX = np.concatenate([pXt[..., None, :], pXH], axis=-2)
+        if not _time_dependent:
+            gX = gX[..., 1:, :]
         return gX
 
     def _tderiv(
