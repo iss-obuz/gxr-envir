@@ -14,6 +14,7 @@ docs/_build/
 __pycache__/
 # Namespace package level
 *.egg-info/
+**/*.vscode
 **/.mypy_cache/
 **/.python-version
 **/.pytype/

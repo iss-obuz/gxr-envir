@@ -1,2 +1,2 @@
-from .state import Envir, Accumulation
-from .agents import Profits, Foresight, Utility
+from .agents import Foresight, Profits, Utility
+from .envir import Envir

@@ -1,11 +1,12 @@
-import pytest
+# ruff: noqa: NPY002
 import numpy as np
+import pytest
+
 from gxr.envir.functions.utility import UtilLinSqrt
 
 
 class TestUtilLinSqrt:
-
-    @pytest.fixture(scope="module", params=[.1, 1, 5])
+    @pytest.fixture(scope="module", params=[0.1, 1, 5])
     def util(self, request) -> UtilLinSqrt:
         b = request.param
         return UtilLinSqrt(b)
@@ -18,9 +19,9 @@ class TestUtilLinSqrt:
         shape = (20,)
         X0 = np.random.normal(mu, sigma, shape)
         X1 = np.random.normal(mu, sigma, shape)
-        X  = np.linspace(X0, X1, 20000)
+        X = np.linspace(X0, X1, 20000)
         U0 = util(X0)
         U1 = util(X1)
         dU = util.deriv(X)
-        U  = U0 + np.trapz(dU, x=X, axis=0)
+        U = U0 + np.trapz(dU, x=X, axis=0)
         assert np.allclose(U, U1)

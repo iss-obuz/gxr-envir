@@ -1,19 +1,31 @@
-from typing import Optional, Any, Union, Self, Iterable, Mapping
 from abc import ABC, abstractmethod
+from math import log
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
-from .game import EnvirGame
-from .functions import Envir, Foresight
-from ..typing import Float1D
-from ..utils.misc import obj_from_dict
+
+from gxr.envir.config import registry
+from gxr.typing import FloatND
+
+from .functions import Envir, Foresight, Utility
+from .functions.utility import UtilityFunction
+
+if TYPE_CHECKING:
+    from .model import EnvirModel
 
 
+@registry.envir.modules.register("behavior")
 class Behavior:
     """Agents' behavior definition.
 
     Attributes
     ----------
-    game
-        Environmental game instance.
+    model
+        Environmental model instance.
+    delay
+        Number of characteristic timescales needed for the perceived state
+        at the level of carrying capacity update to ``K/10``.
+        Must be positive. Lower values indicate less delay.
     eta
         Adaptation rate.
     alpha
@@ -23,14 +35,16 @@ class Behavior:
     rules
         Mapping with behavior rules.
     """
+
     def __init__(
         self,
-        game: EnvirGame,
+        model: "EnvirModel | None" = None,
         *,
-        eta: float = .2,
-        noise: float = 1.0,
-        seed: Optional[int] = None,
-        rules: Iterable[Union[dict, "BehaviorRule"]]
+        delay: float = 1,
+        eta: float = 0.2,
+        noise: float = 0.5,
+        seed: int | None = None,
+        rules: dict[str, "BehaviorRule"],
     ) -> None:
         """Initialization method.
 
@@ -39,47 +53,63 @@ class Behavior:
         seed
             Seed for random number generator.
         """
-        self.game = game
+        self.model = model
         self.rng = np.random.default_rng(seed)
+        self.delay = delay
         self.eta = eta
         self.noise = noise
-        self.rules = [
-            BehaviorRule.from_dict({"behavior": self, **rule})
-            if isinstance(rule, Mapping) else rule
-            for rule in rules
-        ]
+        self.rules_map = rules
+        for k, v in self.rules_map.items():
+            v.behavior = self
+            self.rules_map[k] = v
+
+    def __getattr__(self, attr: str) -> Any:
+        try:
+            return self.rules_map[attr]
+        except KeyError as exc:
+            errmsg = f"'{self.__class__.__name__}' object has not attribute '{attr}'"
+            raise AttributeError(errmsg) from exc
 
     @property
     def n_agents(self) -> int:
-        return self.game.n_agents
+        return self.model.n_agents
 
     @property
     def envir(self) -> Envir:
-        return self.game.envir
+        return self.model.envir
 
     @property
     def foresight(self) -> Foresight:
-        return self.game.foresight
+        return self.model.foresight
 
     @property
     def adaptation_rate(self) -> float:
-        return self.eta * self.envir.r/2
+        return self.eta * self.envir.r / 2
 
     @property
     def sigma(self) -> float:
-        return self.noise * self.envir.r/(10*self.n_agents**.5)
+        return self.noise * self.envir.r / (self.n_agents**0.5)
 
-    def dH(self, E: float, H: Float1D, P: Float1D) -> Float1D:
+    @property
+    def rules(self) -> list["BehaviorRule"]:
+        return list(self.rules_map.values())
+
+    def dH(self, E: float, H: FloatND, P: FloatND) -> FloatND:
         """Determine change of agents' harvesting rates."""
         denom = 0
         dH = np.zeros(self.n_agents, dtype=float)
         for rule in self.rules:
             denom += rule.weight
-            dH += rule.weight*rule.dH(E, H, P)
+            dH += rule.weight * rule.dH(E, H, P)
         dH /= denom
         if self.noise and self.noise > 0:
             dH += self.rng.normal(0, self.sigma, dH.shape)
-        return np.clip(dH*self.adaptation_rate, -H, None)
+        return np.clip(dH * self.adaptation_rate, -H, None)
+
+    def Ehat_deriv(self, E: float, Ehat: float) -> float:
+        """Get time derivative of the perceived environment state."""
+        coef = log(2) / (self.delay * self.envir.T_epsilon)
+        return coef * (E - Ehat)
 
 
 class BehaviorRule(ABC):
@@ -92,37 +122,38 @@ class BehaviorRule(ABC):
     weight
         Weight of the rule.
     """
+
     def __init__(
         self,
-        behavior: Behavior,
+        behavior: Behavior | None,
         *,
-        weight: float = 1
+        weight: float = 1,
     ) -> None:
         self.behavior = behavior
         self.weight = weight
 
+    def __call__(self, *args: Any, **kwds: Any) -> FloatND:  # noqa
+        """Determine change of agents' harvesting rates."""
+        return self.dH(*args, **kwds)
+
     @property
-    def game(self) -> EnvirGame:
-        return self.behavior.game
+    def model(self) -> "EnvirModel | None":
+        return self.behavior.model
 
     @property
     def envir(self) -> Envir:
-        return self.game.envir
+        return self.model.envir
 
     @property
     def n_agents(self) -> int:
-        return self.game.n_agents
+        return self.model.n_agents
 
     @abstractmethod
-    def dH(self, E: float, H: Float1D, P: Float1D) -> Float1D:
+    def dH(self, E: float, H: FloatND, P: FloatND) -> FloatND:
         """Determine change of agents' harvesting rates."""
 
-    @classmethod
-    def from_dict(cls, dct: dict) -> Self:
-        """Construct from a dictionary."""
-        return obj_from_dict(dct, factory_key="@rule", package=cls.__module__)
 
-
+@registry.envir.rules.register("foresight")
 class ForesightRule(BehaviorRule):
     """Foresight behavior rule.
 
@@ -131,13 +162,31 @@ class ForesightRule(BehaviorRule):
     alpha
         Coordination strength expected by agents.
     """
-    def __init__(self, behavior: Behavior, alpha: float = .0, **kwds: Any) -> None:
+
+    def __init__(
+        self,
+        behavior: Behavior | None = None,
+        alpha: float = 0.0,
+        **kwds: Any,
+    ) -> None:
         super().__init__(behavior, **kwds)
         self.alpha = alpha
 
-    def dH(self, E: float, H: Float1D, P: Float1D) -> Float1D:
+    @property
+    def foresight(self) -> Foresight:
+        return self.model.foresight
+
+    @property
+    def utilfunc(self) -> UtilityFunction:
+        return self.model.utility
+
+    @property
+    def utility(self) -> Utility:
+        return Utility(self.foresight)
+
+    def dH(self, E: float, H: FloatND, P: FloatND) -> FloatND:  # noqa
         """Determine change of agents' harvesting rates."""
-        dUi, dUj = self.game.utility.hpartial(E, H)
-        weight = self.alpha*(self.n_agents-1)
-        F = (dUi + weight*dUj) / (1 + weight)
+        dUi, dUj = self.utility.hpartial(E, H)
+        weight = self.alpha * (self.n_agents - 1)
+        F = (dUi + weight * dUj) / (1 + weight)
         return F / self.envir.K

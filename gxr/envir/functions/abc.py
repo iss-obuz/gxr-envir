@@ -1,26 +1,25 @@
-from typing import Any, Self, Mapping
+# ruff: noqa: RET504
 from abc import ABC, abstractmethod
 from math import ceil
+from typing import Any
+
 import numpy as np
-from ...typing import FloatND
-from ...utils.misc import obj_from_dict
-from ...utils.array import make_arrays, numderiv, expand_dims
+
+from gxr.typing import FloatND
+from gxr.utils.array import make_arrays, numderiv
 
 
 class Function(ABC):
     """Mathematical function class."""
+
     @abstractmethod
     def __call__(self, *args: Any, **kwds: Any) -> Any:
         """Function computations."""
 
-    @classmethod
-    def from_dict(cls, dct: Mapping) -> Self:
-        """Construct from a mapping."""
-        return obj_from_dict(dct, package=cls.__module__)
-
 
 class DifferentiableFunction(Function):
     """Differentiable function class."""
+
     @abstractmethod
     def deriv(self, *args: Any, **kwds: Any) -> Any:
         """Function derivative."""
@@ -38,59 +37,40 @@ class ModelFunction(Function):
     numint_max_steps
         Maximum number of steps used for numerical integration.
     """
+
     limtol = {"rtol": 1e-6, "atol": 1e-6}
 
     def __init__(
         self,
         *,
-        numint_step_size: float = .5,
+        numint_step_size: float = 0.5,
         numint_min_steps: int = 20,
-        numint_max_steps: int = 100
+        numint_max_steps: int = 100,
     ) -> None:
         self.numint_step_size = numint_step_size
         self.numint_min_steps = numint_min_steps
         self.numint_max_steps = numint_max_steps
 
     @abstractmethod
-    def tpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def tpartial(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Partial derivative with respect to time."""
 
     @abstractmethod
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def hpartial(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Partial derivative with respect to harvesting rate."""
 
     @abstractmethod
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Gradient."""
 
     @abstractmethod
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) ->  float | FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Time path derivative."""
 
     def make_grid(self, start: FloatND, stop: FloatND, **kwds: Any) -> FloatND:
         """Get time grid for numerical integration over the future."""
         span = abs(np.max(stop) - np.min(start))
-        n_steps = ceil(span/self.numint_step_size)
+        n_steps = ceil(span / self.numint_step_size)
         n_steps = max(min(n_steps, self.numint_max_steps), self.numint_min_steps)
         return np.linspace(start, stop, **{"num": n_steps, **kwds})
 
@@ -98,46 +78,34 @@ class ModelFunction(Function):
 class StateFunction(ModelFunction):
     """Generic global state function."""
 
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Gradient.
 
         Parameters
         ----------
-        t
-            Time.
-        E0, h
-            Initial state and harvesting rate.
-            Must be mutually broadcastable.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable in ``t, E0, h`` order.
         """
         return np.stack([self.tpartial(t, E0, h), self.hpartial(t, E0, h)], axis=0)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        h: float | FloatND = 0
-    ) ->  float | FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
         """Time path derivative.
 
         Parameters
         ----------
-        t, h
-            Time and harvesting rates.
-            Must be of the same shape.
-        E0
-            Initial state.
-            Must be broadcastable with ``h``.
+        t, E0, h
+            Time, initial state of the environment and harvesting rate(s).
+            Must be jointly broadcastable in ``t, E0, h`` order
+            and ``t`` and ``h`` must be of the same shape.
         """
-        t, h = make_arrays(t, h)
+        t, E0, h = make_arrays(t, E0, h)
         if t.shape != h.shape:
-            raise ValueError("'t' and 'h' have to be of the same shape")
+            errmsg = "'t' and 'h' must be of the same shape"
+            raise ValueError(errmsg)
+        t, E0, h = np.broadcast_arrays(t, E0, h)
         dh = numderiv(h, t, axis=0)
-        dX = self.tpartial(t, E0, h) + dh*self.hpartial(t, E0, h)
+        dX = self.tpartial(t, E0, h) + dh * self.hpartial(t, E0, h)
         return dX
 
 
@@ -145,79 +113,77 @@ class AgentsFunction(ModelFunction):
     """Generic agents state function."""
 
     @abstractmethod
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: FloatND
-    ) -> tuple[FloatND, FloatND]:
+    def tpartial(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
+        """Partial derivative with respect to time."""
+
+    @abstractmethod
+    def hpartial(self, t: FloatND, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect agents' own harvesting rates
         and harvesting rates of another agent.
         """
 
     @abstractmethod
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND = 0
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Gradient."""
 
     @abstractmethod
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND = 0
-    ) -> float | FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative."""
 
     # Internals ------------------------------------------------------------------------
 
     @staticmethod
-    def align_with_H(H: FloatND, *Xs: np.ndarray) -> tuple[np.ndarray, ...]:
-        if not Xs:
-            raise ValueError("no arrays to align")
-        H, *Xs = make_arrays(H, *Xs)
-        *Xs, _ = np.broadcast_arrays(*Xs, H[0])
-        n_dims = Xs[0].ndim - H[0].ndim
-        H = expand_dims(H, n_dims, axis=1)
-        return (*Xs, H)
+    def prepare_data(H: FloatND, *args: FloatND, h: bool = True) -> tuple[FloatND, ...]:
+        H = np.atleast_2d(H)
+        args = make_arrays(*args)
+        is_multiparam_single = H.size == 1 and any(x.size > 1 for x in args)
+        *args, H = np.broadcast_arrays(*args, H)  # type: ignore
+        args = (*args, H)
+        if h:
+            args = (*args, np.broadcast_to(H.sum(axis=-1)[..., None], H.shape))
+        args = tuple(
+            x.squeeze(axis=0) if x.ndim == 2 and x.shape[0] == 1 else x for x in args
+        )
+        if is_multiparam_single:
+            args = (x[..., None] for x in args)  # type: ignore
+        return args
 
-    @staticmethod
-    def align_agent_arrays(*Xs: np.ndarray) -> tuple[np.ndarray, ...]:
-        Xs = (np.moveaxis(np.atleast_1d(x), 0, -1) for x in Xs)
-        Xs = np.broadcast_arrays(*Xs)
-        Xs = (np.moveaxis(x, -1, 0) for x in Xs)
-        return Xs
-
-    def _gradient(self, *args: Any, H: FloatND, **kwds) -> FloatND:
+    def _gradient(
+        self, *args: Any, H: FloatND, _time_dependent: bool = True, **kwds: Any
+    ) -> FloatND:
         pXt = self.tpartial(*args, H=H, **kwds)
         pXhi, pXhj = self.hpartial(*args, H=H, **kwds)
-        n_agents = len(np.atleast_1d(H))
+        n_agents = np.atleast_1d(H).shape[-1]
+        pXt = np.atleast_1d(pXt)
+        pXhi = np.atleast_1d(pXhi)
+        pXhj = np.atleast_1d(pXhj)
         idx = np.arange(n_agents)
-        pXH = np.repeat(np.expand_dims(pXhj, 0), n_agents, axis=0)
-        pXH[idx, idx] = pXhi
-        return np.concatenate([pXt[:, None, ...], pXH], axis=1)
+        pXH = np.repeat(pXhj[..., None, :], n_agents, axis=-2)
+        pXH[..., idx, idx] = pXhi
+        gX = np.concatenate([pXt[..., None, :], pXH], axis=-2)
+        if not _time_dependent:
+            gX = gX[..., 1:, :]
+        return gX
 
     def _tderiv(
         self,
         t: float | FloatND,
-        H: float | FloatND = 0,
+        H: float | FloatND = 0.0,
         *args: Any,
         _time_dependent: bool = True,
-        **kwds: Any
-    ) ->  float | FloatND:
+        **kwds: Any,
+    ) -> float | FloatND:
         """Time path derivative."""
         t, H = make_arrays(t, H)
-        if t.shape != H[0].shape:
-            raise ValueError("'t' and 'H[0]' have to be of the same shape")
-        dH  = numderiv(H, t[None, ...], axis=1)
-        dh  = dH.sum(axis=0)
+        if t.shape != H[..., 0].shape:
+            errmsg = "'t' and 'H[..., 0]' have to be of the same shape"
+            raise ValueError(errmsg)
+        t = t[..., None]
+        dH = numderiv(H, t, axis=0)
+        dh = dH.sum(axis=-1)
         if _time_dependent:
             args = (t, *args)
         pXt = self.tpartial(*args, H=H, **kwds)
         pXhi, pXhj = self.hpartial(*args, H=H, **kwds)
-        dP = pXt + dH*pXhi + (dh-dH)*pXhj
+        dP = pXt + dH * pXhi + (dh[..., None] - dH) * pXhj
         return dP

@@ -1,21 +1,15 @@
-import os
+from pathlib import Path
+from typing import TypeAlias
+
 import numpy as np
+import numpy.typing as npt
+from matplotlib.axes import Axes as _Axes
 from matplotlib.figure import Figure
-from matplotlib.axes import Axes
 
-PathLike = str | bytes | os.PathLike
+PathLike = str | Path
 Figure = Figure
-Axes = Axes
-AxesGrid = np.ndarray[tuple[int, ...], Axes]
+Axes: TypeAlias = _Axes
+AxesGrid = npt.NDArray[np.object_]
 
-Int1D = np.ndarray[tuple[int], np.integer]
-Int2D = np.ndarray[tuple[int, int], np.integer]
-IntND = np.ndarray[tuple[int, ...], np.integer]
-Float1D = np.ndarray[tuple[int], np.floating]
-Float2D = np.ndarray[tuple[int, int], np.floating]
-FloatND = np.ndarray[tuple[int, ...], np.floating]
-
-Array1D = np.ndarray[tuple[int]]
-Array2D = np.ndarray[tuple[int, int]]
-ArrayND = np.ndarray[tuple[int, ...]]
-Numeric = float | FloatND | int | IntND
+IntND = int | npt.NDArray[np.integer[npt.NBitBase]]
+FloatND = float | npt.NDArray[np.floating[npt.NBitBase]]

@@ -1,13 +1,21 @@
-from typing import Any, Optional
+# ruff: noqa: RET504
+from typing import Any
+
 import numpy as np
+
+from gxr.envir.config import registry
+from gxr.typing import FloatND
+from gxr.utils.array import expand_dims
+
 from .abc import AgentsFunction
-from .state import Envir, Accumulation
-from .utility import UtilityFunction, UtilIdentity
-from ...typing import FloatND
+from .accumulation import Accumulation
+from .envir import Envir
+from .utility import UtilIdentity, UtilityFunction
 
 
+@registry.envir.functions.register("profits")
 class Profits(AgentsFunction):
-    """"Profits function.
+    """ "Profits function.
 
     Attributes
     ----------
@@ -17,159 +25,120 @@ class Profits(AgentsFunction):
         Agent sustenance rate.
     cost
         Agent harvesting cost rate.
-    rKN
-        ``r``, ``K`` and ``N`` parameters for natural scaling
-        of sustenance and harvesting costs.
     """
+
     def __init__(
-        self,
-        accumulation: Accumulation,
-        sustenance: float = 0,
-        cost: float = 0,
-        **kwds: Any
+        self, envir: Envir, sustenance: float = 0.0, cost: float = 0.0, **kwds: Any
     ) -> None:
         super().__init__(**kwds)
-        self.accumulation = accumulation
+        self.envir = envir
         self.sustenance = sustenance
         self.cost = cost
 
     @property
-    def envir(self) -> Envir:
-        return self.accumulation.envir
+    def accumulation(self) -> Accumulation:
+        return Accumulation(self.envir)
 
-    def __call__(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: FloatND
-    ) -> float | FloatND:
+    def __call__(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Profits.
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and individual harvesting rates.
-            ``E0`` has to be broadcastable with ``H.sum(axis=0)``,
-            which is expected to return overall harvesting rates
-            (sums over agents).
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        t, E0, H = self.align_with_H(H, t, E0)
-        A = self.accumulation(t, E0, H.sum(axis=0))
-        V = H*A
-        C = t*(H*self.cost + self.sustenance)
+        t, E0, H, h = self.prepare_data(H, t, E0)
+        A = self.accumulation(t, E0, h)
+        V = H * A
+        C = t * (H * self.cost + self.sustenance)
         P = V - C
         return P
 
-    def deriv(self, E: float | FloatND, H: FloatND) -> FloatND:
+    def deriv(self, E: FloatND, H: FloatND) -> FloatND:
         """Implicit time derivative for solving ODEs.
 
         Parameters
         ----------
         E, H
             Environment states and individual harvesting rates.
-            Must be mutually broadcastable.
+            Must be broadcastable in the arguments' order.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        E, H = self.align_with_H(H, E)
-        dP = H*(E - self.cost) - self.sustenance
+        E, H = self.prepare_data(H, E, h=False)
+        dP = H * (E - self.cost) - self.sustenance
         return dP
 
-    def tpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> FloatND:
+    def tpartial(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        t, E0, H = self.align_with_H(H, t, E0)
-        dA = self.accumulation.tpartial(t, E0, H.sum(axis=0))
-        dP = H*dA - H*self.cost - self.sustenance
+        t, E0, H, h = self.prepare_data(H, t, E0)
+        dA = self.accumulation.tpartial(t, E0, h)
+        dP = H * dA - H * self.cost - self.sustenance
         return dP
 
-    def hpartial(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND,
-    ) -> tuple[FloatND, FloatND]:
+    def hpartial(self, t: FloatND, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect to agents' own harvesting rates
         and harvesting rates of another agent.
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        t, E0, H = self.align_with_H(H, t, E0)
-        h   = H.sum(axis=0)
-        A   = self.accumulation(t, E0, h)
-        dA  = self.accumulation.hpartial(t, E0, h)
-        dPj = H*dA
-        dPi = dPj + A - self.cost*t
+        t, E0, H, h = self.prepare_data(H, t, E0)
+        A = self.accumulation(t, E0, h)
+        dA = self.accumulation.hpartial(t, E0, h)
+        dPj = H * dA
+        dPi = dPj + A - self.cost * t
         return dPi, dPj
 
-    def gradient(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND,
-    ) -> float | FloatND:
+    def gradient(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Gradient.
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
         return self._gradient(t, E0, H=H)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND,
-    ) -> FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0, H
-            Initial state and harvesting rate.
-            ``E0`` must be broadcastable with ``H.sum(axis=0)``.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
+            Moreover, ``t`` and ``H[..., 0]`` must be of the same shape.
         """
         return self._tderiv(t, H, E0, _time_dependent=True)
 
     # Internals ------------------------------------------------------------------------
 
-    def rescale_cost_rates(self, n_agents: int, envir: Envir) -> None:
+    def rescale_cost_rates(self, n_agents: int, envir: Envir | None = None) -> None:
         """Scale sustenance and harvesting cost rates."""
-        self.sustenance *= envir.r*envir.K / (4*n_agents)
-        self.cost *= envir.K / (2*n_agents)
+        if envir is None:
+            envir = self.envir
+        self.sustenance *= envir.r * envir.K / (4 * n_agents)
+        self.cost *= envir.K / (2 * n_agents)
 
 
+@registry.envir.functions.register("foresight")
 class Foresight(AgentsFunction):
     r"""Foresight function.
 
@@ -177,22 +146,26 @@ class Foresight(AgentsFunction):
     ----------
     profits
         Profits function.
-    gamma
-        Time discount rate.
+    horizon
+        Width of the foresight expressed in terms of the number
+        of characteristic timescales of the environment.
     epsilon
         :math:`\epsilon`-threshold for determining
         the characteristic timescale of foresight.
     """
+
+    _default_epsilon = 0.01
+
     def __init__(
         self,
         profits: Profits,
-        gamma: float = .8,
-        epsilon: float = .01,
-        **kwds: Any
+        horizon: float = 1.0,
+        epsilon: float = _default_epsilon,
+        **kwds: Any,
     ) -> None:
         super().__init__(**kwds)
         self.profits = profits
-        self.gamma = gamma
+        self.horizon = horizon
         self.epsilon = epsilon
 
     @property
@@ -200,120 +173,106 @@ class Foresight(AgentsFunction):
         return self.profits.envir
 
     @property
+    def gamma(self) -> float:
+        """Foresight discount rate."""
+        return self.epsilon ** (1 / (self.horizon * self.envir.T_epsilon))
+
+    @property
     def tmax(self) -> float:
+        """Effective endpoint of the foresight time interval."""
         return np.log(self.epsilon) / np.log(self.gamma)
 
-    def __call__(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def __call__(self, E0: FloatND, H: FloatND) -> FloatND:
         """Foresight function.
 
         Parameters
         ----------
-        E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
-        H
-            Individual harvesting rates.
+        E0, H
+            Initial state of the environment and individual harvesting rates.
+            ``E0`` and ``H`` must be broadcastable in the order of arguments.
+            ``H.sum(axis=-1)`` must give overall harvesting rate(s).
         """
-        H = np.array(H)
-        E0, _ = np.broadcast_arrays(E0, H[0])
-        T  = self.make_T(E0.shape)
-        W  = self.make_W(T)
-        Et = self.envir(T, E0, H.sum(axis=0))
-        dP = self.profits.deriv(Et, H)
-        F  = np.trapz(W*dP, x=T[None, ...], axis=1)
+        E0, H, h = self.prepare_data(H, E0)
+        T = self.make_T(H)
+        W = self.make_W(T)
+        Et = self.envir(T, E0, h)
+        dP = np.atleast_1d(self.profits.deriv(Et, H))
+        if H.size == 1:
+            dP = dP[..., 0]
+        F = np.trapz(W * dP, x=T, axis=0)
         return F
 
-    def tpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def tpartial(self, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
-        shape = (len(H), *np.broadcast(E0, H[0]).shape)
-        return np.zeros(shape)
+        E0, _ = self.prepare_data(H, E0, h=False)
+        return np.zeros(E0.shape)
 
-    def hpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> tuple[FloatND, FloatND]:
+    def hpartial(self, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect to agents' own harvesting rates
         and harvesting rates of another agent.
 
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
-        H = np.array(H)
-        E0, _ = np.broadcast_arrays(E0, H[0])
-        T  = self.make_T(E0.shape)
-        T, E0, H = self.align_with_H(H, T, E0)
-        W  = self.make_W(T)
-        h  = H.sum(axis=0)
-        Et  = self.envir(T, E0, h)
-        dE  = self.envir.hpartial(T, E0, h)
-        dFj = H*dE
+        E0, H, h = self.prepare_data(H, E0)
+        T = self.make_T(H)
+        W = self.make_W(T)
+        Et = self.envir(T, E0, h)
+        dE = self.envir.hpartial(T, E0, h)
+        dFj = H * dE
         dFi = Et - self.profits.cost + dFj
-        dFi = np.trapz(W*dFi, x=T[None, ...], axis=1)
-        dFj = np.trapz(W*dFj, x=T[None, ...], axis=1)
+        dFi = np.trapz(W * dFi, x=T, axis=0)
+        dFj = np.trapz(W * dFj, x=T, axis=0)
         return dFi, dFj
 
-    def gradient(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def gradient(self, E0: FloatND, H: FloatND) -> FloatND:
         """Gradient.
 
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
-        return self._gradient(E0, H=H)
+        return self._gradient(E0, H=H, _time_dependent=False)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
-        H
-            Individual harvesting rates.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
         return self._tderiv(t, H, E0, _time_dependent=False)
 
     # Internals ------------------------------------------------------------------------
 
-    def make_T(self, shape: tuple[int, ...] = ()) -> FloatND:
+    def make_T(self, H: FloatND) -> FloatND:
         """Make time grid for foresight."""
-        start = np.zeros(shape).squeeze()
-        return self.make_grid(start, self.tmax)
+        H = np.array(H)
+        start = np.zeros(H.shape[-1])
+        T = self.make_grid(start, self.tmax)
+        T = expand_dims(T, H.ndim - 1, axis=1)
+        return T
 
     def make_W(self, T: FloatND) -> FloatND:
         """Make discount weights."""
@@ -329,46 +288,37 @@ class Utility(AgentsFunction):
     foresight
         Foresight function.
     func
-        Core utility function.
+        Core utility function. Defaults to identity function,
     """
+
     def __init__(
-        self,
-        foresight: Foresight,
-        func: UtilityFunction = UtilIdentity(),
-        **kwds: Any
+        self, foresight: Foresight, func: UtilityFunction | None = None, **kwds: Any
     ) -> None:
         super().__init__(**kwds)
         self.foresight = foresight
-        self.func = func
+        self.func = func or UtilIdentity()
 
     @property
     def envir(self) -> Envir:
         return self.foresight.envir
 
-    def __call__(
-        self,
-        E0: float | FloatND,
-        H: FloatND
-    ) -> FloatND:
+    def __call__(self, E0: FloatND, H: FloatND) -> FloatND:
         """Agent utility function.
 
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
         U = self.foresight(E0, H)
         if not self.func.is_identity:
             U = self.func(U)
         return U
 
-    def tpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def tpartial(self, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivative with respect to time.
 
         Parameters
@@ -377,67 +327,55 @@ class Utility(AgentsFunction):
             Initial state. Must be broadcasting with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
-        shape = (len(H), *np.broadcast(E0, H[0]).shape)
-        return np.zeros(shape)
+        E0, _ = self.prepare_data(H, E0, h=False)
+        return np.zeros(E0.shape)
 
-    def hpartial(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> tuple[FloatND, FloatND]:
+    def hpartial(self, E0: FloatND, H: FloatND) -> tuple[FloatND, FloatND]:
         """Partial derivatives with respect agents' own harvesting rates
         and harvesting rates of another agent.
 
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
+        H = np.atleast_1d(H)
         E0, _ = np.broadcast_arrays(E0, H[0])
         dFi, dFj = self.foresight.hpartial(E0, H)
         if not self.func.is_identity:
             F = self.foresight(E0, H)
-            dU  = self.func.deriv(F)
+            dU = self.func.deriv(F)
             dFi *= dU
             dFj *= dU
         return dFi, dFj
 
-    def gradient(
-        self,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> float | FloatND:
+    def gradient(self, E0: FloatND, H: FloatND) -> FloatND:
         """Partial derivatives with respect agents' own harvesting rates
         and harvesting rates of another agent.
 
         Parameters
         ----------
         E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
+            Initial state. Must be broadcastable with ``H.sum(axis=0)``.
         H
             Individual harvesting rates.
+            ``H.sum(axis=0)`` must give overall rates.
         """
-        return self._gradient(E0, H=H)
+        return self._gradient(E0, H=H, _time_dependent=False)
 
-    def tderiv(
-        self,
-        t: float | FloatND,
-        E0: float | FloatND,
-        H: float | FloatND
-    ) -> FloatND:
+    def tderiv(self, t: FloatND, E0: FloatND, H: FloatND) -> FloatND:
         """Time path derivative.
 
         Parameters
         ----------
-        t
-            Time.
-            Must be broadcastable with the broadcast of ``E0`` and ``H.sum(axis=0)``.
-        E0
-            Initial state. Must be broadcasting with ``H.sum(axis=0)``.
-        H
-            Individual harvesting rates.
+        t, E0, H
+            Time, initial state of the environment and individual harvesting rates.
+            ``t``, ``E0`` and ``H[0]`` must be broadcastable in the arguments' order.
+            ``H.sum(axis=0)`` must give overall harvesting rate(s).
         """
         return self._tderiv(t, H, E0, _time_dependent=False)

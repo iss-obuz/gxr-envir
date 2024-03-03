@@ -1,15 +1,18 @@
-from typing import Any, Optional
+from typing import Any
+
 import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
 from tqdm import tqdm as TqdmPBar
 from tqdm.autonotebook import tqdm
-from .game import EnvirGame
+
+from gxr.typing import FloatND
+
 from .behavior import Behavior
-from ..typing import Float1D, Float2D
+from .model import EnvirModel
 
 
-class Results:
+class EnvirDynamicsResults:
     """Environmental dynamics simulation results.
 
     Attributes
@@ -17,6 +20,7 @@ class Results:
     ode
         ODE system solution.
     """
+
     def __init__(self, ode: OdeResult) -> None:
         self.ode = ode
 
@@ -25,26 +29,31 @@ class Results:
         return (len(self.ode.y) - 1) // 2
 
     @property
-    def T(self) -> Float1D:
+    def T(self) -> FloatND:
         """Time grid of the ODE solution."""
-        return self.ode.t
+        return np.atleast_1d(self.ode.t)
 
     @property
-    def E(self) -> Float1D:
+    def E(self) -> FloatND:
         """Environment states over the time grid."""
-        return self.ode.y[0]
+        return np.atleast_1d(self.ode.y[0])
 
     @property
-    def P(self) -> Float2D:
+    def Ehat(self) -> FloatND:
+        """Perceived states of the environment."""
+        return np.atleast_1d(self.ode.y[1])
+
+    @property
+    def P(self) -> FloatND:
         """Agents' profits over the time grid."""
-        return self.ode.y[1:self.n_agents+1]
+        return np.atleast_1d(self.ode.y[2 : 2 + self.n_agents])
 
     @property
-    def H(self) -> Float2D:
+    def H(self) -> FloatND:
         """Harvesting rates over the time grid."""
-        return self.ode.y[-self.n_agents:]
+        return np.atleast_1d(self.ode.y[-self.n_agents :])
 
-    def get_arrays(self) -> tuple[Float1D, Float1D, Float2D, Float2D]:
+    def get_arrays(self) -> tuple[FloatND, FloatND, FloatND, FloatND]:
         """Get time grid and all results array.
 
         Returns
@@ -66,23 +75,20 @@ class EnvirDynamics:
 
     Attributes
     ----------
-    game
-        Environmental game instance.
-    behavior
-        Agents' behavior definition instance.
-        Should be passed as a dictionary defining behavior parameters.
+    model
+        Environmental model instance.
     """
-    def __init__(
-        self,
-        game: EnvirGame,
-        behavior: Optional[dict] = None
-    ) -> None:
-        self.game = game
-        self.behavior = Behavior(game, **(behavior or {}))
+
+    def __init__(self, model: EnvirModel) -> None:
+        self.model = model
 
     @property
     def n_agents(self) -> int:
-        return self.game.n_agents
+        return self.model.n_agents
+
+    @property
+    def behavior(self) -> Behavior:
+        return self.model.behavior
 
     def run(
         self,
@@ -90,11 +96,11 @@ class EnvirDynamics:
         *,
         progress: bool | dict = False,
         tol: float | tuple[float, float] = 1e-2,
-        etol: Optional[float | tuple[float, float]] = 1e-3,
-        ptol: Optional[float | tuple[float, float]] = None,
-        htol: Optional[float | tuple[float, float]] = None,
-        **kwds: Any
-    ) -> Results:
+        etol: float | tuple[float, float] | None = 1e-3,
+        ptol: float | tuple[float, float] | None = None,
+        htol: float | tuple[float, float] | None = None,
+        **kwds: Any,
+    ) -> EnvirDynamicsResults:
         """Run environmental dynamics simulation by solving the ODE system.
 
         Parameters
@@ -124,74 +130,81 @@ class EnvirDynamics:
         disable = not progress
         if not isinstance(progress, dict):
             progress = {}
-        pbar = tqdm(total=t, disable=disable, **{
-            "desc": "Solving ODE system",
-            "delay": 2,
-            "bar_format": "{l_bar}{bar}{n:.2f}/{total_fmt} "
+        pbar = tqdm(
+            total=t,
+            disable=disable,
+            **{
+                "desc": "Solving ODE system",
+                "delay": 2,
+                "bar_format": "{l_bar}{bar}{n:.2f}/{total_fmt} "
                 "[{elapsed}, {rate_fmt}{postfix}]",
-            **progress
-        })
+                **progress,
+            },
+        )
         tol = self._get_tols(tol)
         ertol, eatol = self._get_tols(etol, tol)
         prtol, patol = self._get_tols(ptol, tol)
         hrtol, hatol = self._get_tols(htol, tol)
+        rtol = np.concatenate(
+            [[ertol] * 2, np.full(self.n_agents, prtol), np.full(self.n_agents, hrtol)]
+        )
+        atol = np.concatenate(
+            [[eatol] * 2, np.full(self.n_agents, patol), np.full(self.n_agents, hatol)]
+        )
         t_span = (0, t)
-        sol = solve_ivp(self.ode, t_span, self.get_y0(), args=(pbar,), **{
-            "method": "RK23",
-            "rtol": np.concatenate([
-                [ertol],
-                np.full(self.n_agents, prtol),
-                np.full(self.n_agents, hrtol)
-            ]),
-            "atol": np.concatenate([
-                [eatol],
-                np.full(self.n_agents, patol),
-                np.full(self.n_agents, hatol)
-            ]),
-            **kwds
-        })
+        sol = solve_ivp(
+            self.ode,
+            t_span,
+            self.get_y0(),
+            args=(pbar,),
+            **{"method": "RK23", "rtol": rtol, "atol": atol, **kwds},
+        )
         E = sol.y[0, -1]
-        P = sol.y[1:self.n_agents+1, -1]
-        H = sol.y[-self.n_agents:, -1]
-        self.game.E = E
-        self.game.P = P
-        self.game.H = H
+        P = sol.y[1 : self.n_agents + 1, -1]
+        H = sol.y[-self.n_agents :, -1]
+        self.model.E = E
+        self.model.P = P
+        self.model.H = H
         pbar.close()
-        return Results(sol)
+        return EnvirDynamicsResults(sol)
 
-    def ode(self, t: float, y: Float1D, pbar: Optional[TqdmPBar] = None) -> Float1D:
+    def ode(self, t: float, y: FloatND, pbar: TqdmPBar | None = None) -> FloatND:
         """Dynamics represented as an ODE system.
 
         The logic and signature of the method is compatible
         with the interface of the :func:`scipy.integrate.solve_ivp`.
         """
+        y = np.atleast_1d(y)
         E = y[0]
-        P = y[1:self.n_agents+1]
-        H = y[-self.n_agents:]
-        dE = np.array([
-            self.game.envir.deriv(E, H.sum()),
-            *self.game.profits.deriv(E, H),
-            *self.behavior.dH(E, H, P)
-        ])
+        Ehat = y[1]
+        P = y[2 : 2 + self.n_agents]
+        H = y[-self.n_agents :]
+        dX = self.model.deriv(E, Ehat, H, P)
         if pbar is not None and (deltat := t - pbar.n) > 0:
             pbar.update(deltat)
-        return dE
+        return dX
 
-    def get_y0(self) -> Float1D:
+    def get_y0(self) -> FloatND:
         """Get initial state for ODE."""
-        return np.array([self.game.E, *self.game.P.copy(), *self.game.H.copy()])
+        E = self.model.E
+        return np.array([E, E, *self.model.P.copy(), *self.model.H.copy()])
+
+    def get_vicious_bounds(self, sol: EnvirDynamicsResults) -> FloatND:
+        """Get bounds of the vicious cycle region."""
+        return self.model.get_vicious_bounds(sol.H.sum(axis=0))
 
     # Iternals -------------------------------------------------------------------------
 
     def _get_tols(
         self,
         tol: None | float | tuple[float, float],
-        defaults: Optional[float | tuple[float, float]] = None
+        defaults: float | tuple[float, float] | None = None,
     ) -> tuple[float, float]:
         if tol is None:
             if defaults is not None:
                 return self._get_tols(defaults)
-            raise ValueError("no tolerance levels an no default passed")
+            errmsg = "no tolerance levels and no defaults passed"
+            raise ValueError(errmsg)
         if isinstance(tol, tuple):
             rtol, atol = tol
         else:
