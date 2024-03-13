@@ -1,10 +1,14 @@
-from typing import Any
+# ruff: noqa: S311
+import random
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from typing import Any, Self
 
 import numpy as np
+import tqdm.auto
 from scipy.integrate import solve_ivp
 from scipy.integrate._ivp.ivp import OdeResult
 from tqdm import tqdm as TqdmPBar
-from tqdm.autonotebook import tqdm
 
 from gxr.typing import FloatND
 
@@ -20,6 +24,39 @@ class EnvirDynamicsResults:
     ode
         ODE system solution.
     """
+
+    @dataclass
+    class Arrays(Iterable[FloatND]):
+        T: FloatND
+        E: FloatND
+        P: FloatND
+        H: FloatND
+
+        def __iter__(self) -> Iterator[FloatND]:
+            for field_name in self.__dataclass_fields__:
+                yield getattr(self, field_name)
+
+        @property
+        def relative(self) -> Self:
+            """Get copy with relative times and profits."""
+            arr = self.__class__(*(x.copy() for x in self))
+            arr.P = arr.P[..., None, 0]
+            arr.T -= arr.T[0]
+            return arr
+
+        @property
+        def n_points(self) -> int:
+            """Number of data points."""
+            return len(self.T)
+
+        def slice(
+            self,
+            start: int | None = None,
+            stop: int | None = None,
+            step: int | None = None,
+        ) -> Self:
+            idx = slice(start, stop, step)
+            return self.__class__(*(x[..., idx] for x in self))
 
     def __init__(self, ode: OdeResult) -> None:
         self.ode = ode
@@ -53,8 +90,18 @@ class EnvirDynamicsResults:
         """Harvesting rates over the time grid."""
         return np.atleast_1d(self.ode.y[-self.n_agents :])
 
-    def get_arrays(self) -> tuple[FloatND, FloatND, FloatND, FloatND]:
+    def get_arrays(
+        self,
+        sample: bool = False,
+    ) -> Arrays:
         """Get time grid and all results array.
+
+        Parameters
+        ----------
+        sample
+            Should a random sub-history be returned instead of the full trajectory.
+            Sampling is done by selecting a random ``i:j`` slice of the data.
+            Use standard library :mod:`random` module to set seed.
 
         Returns
         -------
@@ -67,7 +114,12 @@ class EnvirDynamicsResults:
         H
             Individual harvesting rates.
         """
-        return self.T, self.E, self.P, self.H
+        arr = self.Arrays(self.T, self.E, self.P, self.H)
+        if sample:
+            size = random.randint(2, arr.n_points)
+            start = random.randint(0, arr.n_points - size)
+            arr = arr.slice(start, start + size)
+        return arr
 
 
 class EnvirDynamics:
@@ -94,11 +146,14 @@ class EnvirDynamics:
         self,
         t: float,
         *,
+        raw_time: bool = False,
         progress: bool | dict = False,
         tol: float | tuple[float, float] = 1e-2,
         etol: float | tuple[float, float] | None = 1e-3,
         ptol: float | tuple[float, float] | None = None,
         htol: float | tuple[float, float] | None = None,
+        n_attempts: int = 5,
+        tqdm: type[TqdmPBar] = tqdm.auto.tqdm,
         **kwds: Any,
     ) -> EnvirDynamicsResults:
         """Run environmental dynamics simulation by solving the ODE system.
@@ -107,6 +162,9 @@ class EnvirDynamics:
         ----------
         t
             Maximum time for which to solve.
+        raw_time
+            Use raw time when ``False``.
+            Otherwise ``t`` is interpreted as the number of characteristic timescales.
         progress
             Display progress bar.
             Non-empty dicts are interpreted as ``True``
@@ -123,10 +181,17 @@ class EnvirDynamics:
         htol
             Tolerance level(s) for harvesting rates.
             Use default values when ``None``.
+        n_attempts
+            Number of attempts when the solver does not properly reach the end
+            of the integration range.
+        tqdm
+            :mod:`tqdm` progress bar class to use.
         **kwds
             Passed to :func:`scipy.integrate.solve_ivp`.
             Argument ``args`` cannot be used.
         """
+        if not raw_time:
+            t *= self.behavior.envir.T_epsilon
         disable = not progress
         if not isinstance(progress, dict):
             progress = {}
@@ -135,8 +200,7 @@ class EnvirDynamics:
             disable=disable,
             **{
                 "desc": "Solving ODE system",
-                "delay": 2,
-                "bar_format": "{l_bar}{bar}{n:.2f}/{total_fmt} "
+                "bar_format": "{l_bar}{bar}{n:.2f}/{total:.2f} "
                 "[{elapsed}, {rate_fmt}{postfix}]",
                 **progress,
             },
@@ -151,14 +215,35 @@ class EnvirDynamics:
         atol = np.concatenate(
             [[eatol] * 2, np.full(self.n_agents, patol), np.full(self.n_agents, hatol)]
         )
+
+        # def terminate_numerical(t: float, y: float, *args: Any, **kwds: Any) -> float:  # noqa
+        #     return y[0] - 1e-27
+        # terminate_numerical.terminal = True  # type: ignore
+
+        # events = kwds.pop("events", [])
+        # if isinstance(events, Iterable):
+        #     events = list(events)
+        # if isinstance(events, list):
+        #     events.append(terminate_numerical)
+
+        kwds = {
+            "method": "RK23",
+            "rtol": rtol,
+            "atol": atol,
+            # "events": events,
+            **kwds,
+        }
+
         t_span = (0, t)
-        sol = solve_ivp(
-            self.ode,
-            t_span,
-            self.get_y0(),
-            args=(pbar,),
-            **{"method": "RK23", "rtol": rtol, "atol": atol, **kwds},
-        )
+        sol = None
+        for _ in range(n_attempts):
+            sol = solve_ivp(self.ode, t_span, self.get_y0(), args=(pbar,), **kwds)
+            if sol.success:
+                break
+        if not sol:
+            errmsg = f"intergation failed {n_attempts} times; aborting"
+            raise RuntimeError(errmsg)
+
         E = sol.y[0, -1]
         P = sol.y[1 : self.n_agents + 1, -1]
         H = sol.y[-self.n_agents :, -1]
@@ -187,7 +272,7 @@ class EnvirDynamics:
     def get_y0(self) -> FloatND:
         """Get initial state for ODE."""
         E = self.model.E
-        return np.array([E, E, *self.model.P.copy(), *self.model.H.copy()])
+        return np.array([E, E, *self.model.P, *self.model.H]).copy()  # type: ignore
 
     def get_vicious_bounds(self, sol: EnvirDynamicsResults) -> FloatND:
         """Get bounds of the vicious cycle region."""

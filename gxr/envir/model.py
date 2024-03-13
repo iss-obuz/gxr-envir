@@ -32,6 +32,8 @@ class EnvirModel:
         Agents' profits.
     H
         Agents' harvesting rates.
+    scale_capacity
+        Should carrying capactity be rescale proportionally to the number of agents.
     """
 
     def __init__(
@@ -83,6 +85,8 @@ class EnvirModel:
         if scale_capacity:
             self.envir.rescale_capacity(n_agents)
             self.profits.rescale_cost_rates(n_agents)
+
+        self.E *= self.envir.K
 
     @property
     def n_agents(self) -> int:
@@ -166,7 +170,7 @@ class EnvirModel:
                     self.n_agents * (self.profits.cost + self.profits.sustenance / h),
                 ]
             )
-        B[B[:, 0] > B[:, 1]] = np.nan
+        B[B[:, 0] > B[:, 1]] = np.nan  # type: ignore
         return B
 
     # Internals ------------------------------------------------------------------------

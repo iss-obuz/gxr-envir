@@ -18,7 +18,8 @@ dependencies = [
     "scipy>=1.11",
     "matplotlib>=3.8",
     "tqdm>=4.65",
-    "ipywidgets"
+    "catalogue>=2.0.10",
+    "confection>=0.1.4"
 ]
 dynamic = ["version"]
 
@@ -27,7 +28,10 @@ dev = [
     "setuptools-scm>=8",
     "ipython>=8.0",
     "ipdb>=0.10",
+    "ipywidgets",
+    "ipykernel",
     "pytest>=7.0",
+    "pytest-sugar",
     "pylint",
     "mypy",
     "coverage",

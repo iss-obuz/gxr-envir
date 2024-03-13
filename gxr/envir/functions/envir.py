@@ -57,7 +57,7 @@ class Envir(StateFunction):
         """Characteristic timescale."""
         return -2 / self.r * np.log(self.epsilon / (1 - self.epsilon))
 
-    def __call__(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:
+    def __call__(self, t: FloatND, E0: FloatND, h: FloatND = 0) -> FloatND:  # type: ignore
         """Environment state.
 
         Parameters

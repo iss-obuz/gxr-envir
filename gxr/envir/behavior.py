@@ -84,11 +84,11 @@ class Behavior:
 
     @property
     def adaptation_rate(self) -> float:
-        return self.eta * self.envir.r / 2
+        return self.eta / self.envir.T_epsilon
 
     @property
     def sigma(self) -> float:
-        return self.noise * self.envir.r / (self.n_agents**0.5)
+        return self.noise * self.envir.T_epsilon / (self.n_agents**0.5)
 
     @property
     def rules(self) -> list["BehaviorRule"]:
