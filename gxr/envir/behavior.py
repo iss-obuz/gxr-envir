@@ -83,6 +83,22 @@ class Behavior:
         return self.model.foresight
 
     @property
+    def horizon(self) -> float:
+        return self.model.foresight.horizon
+
+    @horizon.setter
+    def horizon(self, value: float) -> None:
+        self.model.foresight.horizon = value
+
+    @property
+    def alpha(self) -> float:
+        return self.rules_map["foresight"].alpha
+
+    @alpha.setter
+    def alpha(self, value: float) -> None:
+        self.rules_map["foresight"].alpha = value
+
+    @property
     def adaptation_rate(self) -> float:
         return self.eta / self.envir.T_epsilon
 

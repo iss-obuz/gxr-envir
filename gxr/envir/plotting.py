@@ -1,12 +1,14 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from gxr.typing import Axes, AxesGrid, Figure
 
-from .dynamics import EnvirDynamics, EnvirDynamicsResults
 from .model import EnvirModel
+
+if TYPE_CHECKING:
+    from .dynamics import EnvirDynamics, EnvirDynamicsResults
 
 
 class DynamicsPlotter:
@@ -24,8 +26,8 @@ class DynamicsPlotter:
 
     def __init__(
         self,
-        dynamics: EnvirDynamics,
-        results: EnvirDynamicsResults,
+        dynamics: "EnvirDynamics",
+        results: "EnvirDynamicsResults",
         rc: dict | None = None,
     ) -> None:
         self.dynamics = dynamics
@@ -69,6 +71,7 @@ class DynamicsPlotter:
         show_Kh: bool | dict = False,
         show_vicious: bool | dict = False,
         show_perceived: bool | dict = False,
+        show_legend: bool = True,
         **kwds: Any,
     ) -> mpl.axes.Axes:
         """Plot environment state.
@@ -108,7 +111,17 @@ class DynamicsPlotter:
                 Ehat = self.results.Ehat[index]
                 ax.plot(T, Ehat, **{**kwds, **kws})
             ax.plot(T, E, **kwds)
-            return ax
+
+        if show_legend:
+            handles = [
+                mpl.lines.Line2D([0], [0], lw=2, label="True state"),
+                mpl.lines.Line2D(
+                    [0], [0], lw=2, ls=":", color="gray", label="Perceived state"
+                ),
+            ]
+            ax.legend(handles=handles)
+
+        return ax
 
     def plot_harvesting(
         self,
@@ -173,6 +186,7 @@ class DynamicsPlotter:
             T = self.results.T[index]
             U = self.model.utility(self.results.P[:, index])
             ax.set_title(title)
+            ax.axhline(0, ls="--", lw=3, color="red")
             for u in U:
                 ax.plot(T, u, **kwds)
             return ax

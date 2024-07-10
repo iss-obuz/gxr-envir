@@ -125,6 +125,10 @@ class EnvirModel:
         """Agents' profits function."""
         return self.foresight.profits
 
+    @property
+    def reward(self) -> FloatND:
+        return np.clip(self.P, 0, np.inf).prod(0) ** (1 / self.n_agents)
+
     # Methods --------------------------------------------------------------------------
 
     def get_dE(self, E: FloatND, H: FloatND) -> FloatND:
