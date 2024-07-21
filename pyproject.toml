@@ -14,7 +14,7 @@ authors = [{ name = "Szymon Talaga",  email="stalaga@protonmail.com"}]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "numpy>=1.24",
+    "numpy>=1.25",
     "scipy>=1.11",
     "matplotlib>=3.8",
     "tqdm>=4.65",

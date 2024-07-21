@@ -41,6 +41,7 @@ class Config(_Config):
         self,
         config: PathLike | dict[str, Any] | _Config | None = None,
         resolve: bool = True,
+        interpolate: bool = True,
         **kwds: Any,
     ) -> None:
         static_kwds = {**kwds, "interpolate": False}
@@ -48,7 +49,8 @@ class Config(_Config):
         if isinstance(config, PathLike):
             config = _Config().from_disk(config, **static_kwds)
         config = default.merge(config) if config else default
-        config = config.interpolate()
+        if interpolate:
+            config = config.interpolate()
         if resolve and self.__registry__:
             config = self.__registry__.resolve(config, validate=False)
         super().__init__(config)

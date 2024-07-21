@@ -33,7 +33,6 @@ class EnvirDynamicsResults:
         E: FloatND
         P: FloatND
         H: FloatND
-        R: FloatND
 
         def __iter__(self) -> Iterator[FloatND]:
             for field_name in self.__dataclass_fields__:
@@ -113,11 +112,6 @@ class EnvirDynamicsResults:
         self.ode.y[2 : 2 + self.n_agents] = value
 
     @property
-    def R(self) -> FloatND:
-        """Reward at subsequent time steps."""
-        return np.clip(self.P, 0, np.inf).prod(0) ** (1 / len(self.P))
-
-    @property
     def H(self) -> FloatND:
         """Harvesting rates over the time grid."""
         return np.atleast_1d(self.ode.y[-self.n_agents :])
@@ -135,10 +129,8 @@ class EnvirDynamicsResults:
             Agents' profits.
         H
             Individual harvesting rates.
-        R
-            Rewards.
         """
-        return self.Arrays(self.T, self.E, self.P, self.H, self.R)
+        return self.Arrays(self.T, self.E, self.P, self.H)
 
     def sample(
         self,
@@ -195,7 +187,7 @@ class EnvirDynamics:
         raw_time: bool = False,
         progress: bool | dict = False,
         tol: float | tuple[float, float] = 1e-2,
-        etol: float | tuple[float, float] | None = 1e-3,
+        etol: float | tuple[float, float] | None = 1e-2,
         ptol: float | tuple[float, float] | None = None,
         htol: float | tuple[float, float] | None = None,
         n_attempts: int = 5,
@@ -337,13 +329,21 @@ class EnvirDynamics:
         nrows: int = 3,
         ncols: int = 1,
         figsize: tuple[float, float] = (8, 8),
+        state_kwargs: dict[str, Any] | None = None,
+        harvesting_kwargs: dict[str, Any] | None = None,
+        utilities_kwargs: dict[str, Any] | None = None,
     ) -> Figure:
         """Plot solution to the dynamics simulation."""
         plotter = DynamicsPlotter(self, sol)
         fig, axes = plotter.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
-        plotter.plot_state(axes[0], show_vicious=False, show_perceived=True)
-        plotter.plot_harvesting(axes[1])
-        plotter.plot_utilities(axes[2])
+        state_kwargs = {
+            "show_vicious": False,
+            "show_perceived": True,
+            **(state_kwargs or {}),
+        }
+        plotter.plot_state(axes[0], **state_kwargs)
+        plotter.plot_harvesting(axes[1], **(harvesting_kwargs or {}))
+        plotter.plot_utilities(axes[2], **(utilities_kwargs or {}))
         fig.tight_layout()
         return fig
 

@@ -89,3 +89,44 @@ class UtilLinSqrt(UtilityFunction):
         u[m] = 1 / np.sqrt(x[m] + 1 / self.b**2)
         u[~m] = self.b
         return u
+
+
+@registry.envir.utility.register("linroot")
+class UtilLinRoot(UtilityFunction):
+    """Linear-arbitrary root utility function.
+
+    Attributes
+    ----------
+    b
+        Derivative around zero.
+        Has to be positive.
+    c
+        Root order for positive values.
+        Has to be positive.
+    """
+
+    def __init__(self, c: float = 2, b: float = 1) -> None:
+        self.b = b
+        self.c = c
+
+    def __call__(self, x: float | FloatND) -> float | FloatND:
+        b = self.b
+        c = self.c
+        x = np.atleast_1d(x)
+        y = b * x
+        m = x > 0
+        if m.any():
+            mu = 1 if c == 1 else c ** (1 / (1 - c))
+            y[m] = b * ((x[m] + mu**c) ** (1 / c) - mu)
+        return y
+
+    def deriv(self, x: float | FloatND) -> float | FloatND:
+        """Derivative function."""
+        b = self.b
+        c = self.c
+        x = np.atleast_1d(x)
+        y = np.full_like(x, b)
+        m = x <= 0
+        if m.any():
+            y[m] = b / c * (x[m] + c ** (c / (1 - c))) ** ((1 - c) / c)
+        return y

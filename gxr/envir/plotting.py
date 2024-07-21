@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-from gxr.typing import Axes, AxesGrid, Figure
+from gxr.typing import Axes, AxesGrid, Figure, FloatND
 
 from .model import EnvirModel
 
@@ -55,10 +55,18 @@ class DynamicsPlotter:
     def model(self) -> EnvirModel:
         return self.dynamics.model
 
-    def subplots(self, *args: Any, **kwds: Any) -> tuple[Figure, Axes | AxesGrid]:
+    @property
+    def epochs(self) -> FloatND:
+        return self.results.T / self.model.envir.T_epsilon
+
+    def subplots(self, *args: Any, **kwargs: Any) -> tuple[Figure, Axes | AxesGrid]:
         with mpl.rc_context(self.rc):
-            fig, axes = plt.subplots(*args, **kwds)
-            fig.supxlabel("Time")
+            fig, axes = plt.subplots(*args, **kwargs)
+            fkws = {
+                "fontsize": mpl.rcParams["axes.labelsize"],
+                "fontweight": mpl.rcParams["axes.labelweight"],
+            }
+            fig.supxlabel("Epochs", y=0.02, **fkws)
             return fig, axes
 
     def plot_state(
@@ -86,11 +94,12 @@ class DynamicsPlotter:
         """
         index = index or slice(None)
         with mpl.rc_context(self.rc):
-            T = self.results.T[index]
+            # T = self.results.T[index]
+            T = self.epochs[index]
             E = self.results.E[index]
             ax.set_title(title)
             ax.set_ylim(0, self.model.envir.K * 1.02)
-            if kws := self._get_kws(show_opt, {"ls": "--", "lw": 3, "color": "red"}):
+            if kws := self._get_kws(show_opt, {"ls": "--", "lw": 2, "color": "red"}):
                 ax.axhline(self.model.envir.K / 2, **kws)
             if kws := self._get_kws(show_Kh, {"ls": ":", "lw": 2, "color": "gray"}):
                 h = self.results.H[:, index].sum(axis=0)
@@ -118,6 +127,9 @@ class DynamicsPlotter:
                 mpl.lines.Line2D(
                     [0], [0], lw=2, ls=":", color="gray", label="Perceived state"
                 ),
+                mpl.lines.Line2D(
+                    [0], [0], lw=2, ls="--", color="red", label="Harvest-optimal state"
+                ),
             ]
             ax.legend(handles=handles)
 
@@ -131,6 +143,7 @@ class DynamicsPlotter:
         title: str = "Harvesting",
         show_opt: bool | dict = True,
         show_hi: bool | dict = True,
+        show_legend: bool = True,
         **kwds: Any,
     ) -> mpl.axes.Axes:
         """Plot harvesting rates.
@@ -145,7 +158,7 @@ class DynamicsPlotter:
         """
         index = index or slice(None)
         with mpl.rc_context(self.rc):
-            T = self.results.T[index]
+            T = self.epochs[index]
             H = self.results.H[:, index]
             if kws := self._get_kws(
                 show_hi, {"lw": 0.8, "color": "gray", "alpha": 0.2}
@@ -164,7 +177,21 @@ class DynamicsPlotter:
             ax.set_ylabel("Overall rate", **fkws)
             ax.plot(T, H.sum(axis=0), **kwds, zorder=3)
             ax.set_title(title)
-            return ax
+
+        if show_legend:
+            handles = [
+                mpl.lines.Line2D(
+                    [0],
+                    [0],
+                    lw=2,
+                    ls="--",
+                    color="red",
+                    label="Optimal sustainable harvesting rate",
+                )
+            ]
+            ax.legend(handles=handles)
+
+        return ax
 
     def plot_utilities(
         self,
@@ -172,6 +199,7 @@ class DynamicsPlotter:
         index: slice | None = None,
         *,
         title: str = "Agents' utilities",
+        scale: str = "symlog",
         **kwds: Any,
     ) -> mpl.axes.Axes:
         """Plot agents' utilities.
@@ -183,10 +211,11 @@ class DynamicsPlotter:
         """
         index = index or slice(None)
         with mpl.rc_context(self.rc):
-            T = self.results.T[index]
+            T = self.epochs[index]
             U = self.model.utility(self.results.P[:, index])
             ax.set_title(title)
             ax.axhline(0, ls="--", lw=3, color="red")
+            ax.set_yscale(scale)
             for u in U:
                 ax.plot(T, u, **kwds)
             return ax

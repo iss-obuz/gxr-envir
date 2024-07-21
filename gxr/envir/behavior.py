@@ -43,7 +43,7 @@ class Behavior:
         delay: float = 1,
         eta: float = 0.2,
         noise: float = 0.5,
-        seed: int | None = None,
+        random_state: int | np.random.Generator | None = None,
         rules: dict[str, "BehaviorRule"],
     ) -> None:
         """Initialization method.
@@ -54,8 +54,12 @@ class Behavior:
             Seed for random number generator.
         """
         self.model = model
-        self.rng = np.random.default_rng(seed)
-        self.delay = delay
+        self.rng = (
+            random_state
+            if isinstance(random_state, np.random.Generator)
+            else np.random.default_rng(np.random.PCG64(random_state))
+        )
+        self._delay = delay
         self.eta = eta
         self.noise = noise
         self.rules_map = rules
@@ -88,7 +92,7 @@ class Behavior:
 
     @horizon.setter
     def horizon(self, value: float) -> None:
-        self.model.foresight.horizon = value
+        self.model.foresight.horizon = max(1e-6, value)
 
     @property
     def alpha(self) -> float:
@@ -96,7 +100,7 @@ class Behavior:
 
     @alpha.setter
     def alpha(self, value: float) -> None:
-        self.rules_map["foresight"].alpha = value
+        self.rules_map["foresight"].alpha = min(1, max(0, value))
 
     @property
     def adaptation_rate(self) -> float:
@@ -105,6 +109,14 @@ class Behavior:
     @property
     def sigma(self) -> float:
         return self.noise * self.envir.T_epsilon / (self.n_agents**0.5)
+
+    @property
+    def delay(self) -> float:
+        return self._delay
+
+    @delay.setter
+    def delay(self, value: float) -> float:
+        self._delay = max(1e-6, value)
 
     @property
     def rules(self) -> list["BehaviorRule"]:
