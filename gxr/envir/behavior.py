@@ -26,6 +26,9 @@ class Behavior:
         Number of characteristic timescales needed for the perceived state
         at the level of carrying capacity update to ``K/10``.
         Must be positive. Lower values indicate less delay.
+    bias
+        Bias towards higher environment states.
+        Must be between 0 and 1.
     eta
         Adaptation rate.
     alpha
@@ -41,6 +44,7 @@ class Behavior:
         model: "EnvirModel | None" = None,
         *,
         delay: float = 1,
+        bias: float = 0,
         eta: float = 0.2,
         noise: float = 0.5,
         random_state: int | np.random.Generator | None = None,
@@ -59,7 +63,8 @@ class Behavior:
             if isinstance(random_state, np.random.Generator)
             else np.random.default_rng(np.random.PCG64(random_state))
         )
-        self._delay = delay
+        self.delay = delay
+        self.bias = bias
         self.eta = eta
         self.noise = noise
         self.rules_map = rules
@@ -87,36 +92,12 @@ class Behavior:
         return self.model.foresight
 
     @property
-    def horizon(self) -> float:
-        return self.model.foresight.horizon
-
-    @horizon.setter
-    def horizon(self, value: float) -> None:
-        self.model.foresight.horizon = max(1e-6, value)
-
-    @property
-    def alpha(self) -> float:
-        return self.rules_map["foresight"].alpha
-
-    @alpha.setter
-    def alpha(self, value: float) -> None:
-        self.rules_map["foresight"].alpha = min(1, max(0, value))
-
-    @property
     def adaptation_rate(self) -> float:
         return self.eta / self.envir.T_epsilon
 
     @property
     def sigma(self) -> float:
-        return self.noise * self.envir.T_epsilon / (self.n_agents**0.5)
-
-    @property
-    def delay(self) -> float:
-        return self._delay
-
-    @delay.setter
-    def delay(self, value: float) -> float:
-        self._delay = max(1e-6, value)
+        return self.noise * self.envir.T_epsilon / self.n_agents
 
     @property
     def rules(self) -> list["BehaviorRule"]:
@@ -137,7 +118,8 @@ class Behavior:
     def Ehat_deriv(self, E: float, Ehat: float) -> float:
         """Get time derivative of the perceived environment state."""
         coef = log(2) / (self.delay * self.envir.T_epsilon)
-        return coef * (E - Ehat)
+        K = self.envir.K
+        return coef * ((E - Ehat) + self.bias * (K - E))
 
 
 class BehaviorRule(ABC):

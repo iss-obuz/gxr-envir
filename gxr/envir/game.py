@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import numpy as np
 
@@ -40,6 +40,7 @@ class EnvirGame:
         self.dH = np.zeros_like(self.model.P)
         self.Ehat = self.model.E
         self.dt = dt
+        self.params = EnvirGameParams(self)
 
     @property
     def n_agents(self) -> int:
@@ -134,8 +135,10 @@ class EnvirGame:
         """Get full simulation results."""
         T = sol.T.astype(np.float32)
         return {
-            "epochs": T / self.model.envir.K,
+            "epoch": None,
+            "epochs": T / self.model.envir.T_epsilon,
             "T": T,
+            "E": sol.E.astype(np.float32),
             "H": sol.H.flatten().astype(np.float32),
             "P": sol.P.flatten().astype(np.float32),
             "U": self.utility(sol.P).flatten().astype(np.float32),
@@ -178,3 +181,112 @@ class EnvirGame:
         config = Config(config, resolve=True, interpolate=True)
         model = EnvirModel(**config["model"])
         return cls(model, dt=dt)
+
+
+class EnvirGameParams:
+    """Parameter manager.
+
+    Attributes
+    ----------
+    game
+        Game instance.
+    """
+
+    def __init__(
+        self,
+        game: EnvirGame,
+        *,
+        max_horizon: float = 5.0,
+        max_delay: float = 5.0,
+        min_nz: float = 0.01,
+        n_steps: int = 10,
+    ) -> None:
+        self.game = game
+        self.max_horizon = max_horizon
+        self.max_delay = max_delay
+        self.min_nz = min_nz
+        self.n_steps = n_steps
+
+    @property
+    def horizon(self) -> float:
+        return self.game.model.foresight.horizon
+
+    @horizon.setter
+    def horizon(self, value: float) -> None:
+        self.game.model.foresight.horizon = max(
+            self.min_nz, min(value, self.max_horizon)
+        )
+
+    @property
+    def alpha(self) -> float:
+        return self.game.model.behavior.rules_map["foresight"].alpha
+
+    @alpha.setter
+    def alpha(self, value: float) -> None:
+        self.game.model.behavior.rules_map["foresight"].alpha = max(0, min(1, value))
+
+    @property
+    def delay(self) -> float:
+        return self.game.model.behavior.delay
+
+    @delay.setter
+    def delay(self, value: float) -> None:
+        self.game.model.behavior.delay = max(self.min_nz, min(value, self.max_delay))
+
+    @property
+    def bias(self) -> float:
+        return self.game.model.behavior.bias
+
+    @bias.setter
+    def bias(self, value: float) -> None:
+        self.game.model.behavior.bias = max(0, min(1, value))
+
+    @property
+    def horizon_step(self) -> float:
+        return (self.max_horizon - self.min_nz) / self.n_steps
+
+    @property
+    def alpha_step(self) -> float:
+        return 1 / self.n_steps
+
+    @property
+    def delay_step(self) -> float:
+        return (self.max_delay - self.min_nz) / self.n_steps
+
+    @property
+    def bias_step(self) -> float:
+        return 1 / self.n_steps
+
+    def change(
+        self,
+        *,
+        horizon: Literal[-1, 0, 1] = 0,
+        alpha: Literal[-1, 0, 1] = 0,
+        delay: Literal[-1, 0, 1] = 0,
+        bias: Literal[-1, 0, 1] = 0,
+    ) -> float:
+        """Increase or decrease parameters.
+
+        Returns
+        -------
+        n_changes
+            Number of standardized changes for using in regularization.
+        """
+        if horizon > 0:
+            self.horizon += self.horizon_step
+        elif horizon < 0:
+            self.horizon -= self.horizon_step
+        if alpha > 0:
+            self.alpha += self.alpha_step
+        elif alpha < 0:
+            self.alpha -= self.alpha_step
+        if delay > 0:
+            self.delay += self.delay_step
+        elif delay < 0:
+            self.delay -= self.delay_step
+        if bias > 0:
+            self.bias += self.bias_step
+        elif bias < 0:
+            self.bias -= self.bias_step
+
+        return float(abs(horizon) + abs(alpha) + abs(delay) + abs(bias))

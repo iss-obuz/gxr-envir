@@ -19,7 +19,8 @@ dependencies = [
     "matplotlib>=3.8",
     "tqdm>=4.65",
     "catalogue>=2.0.10",
-    "confection>=0.1.4"
+    "confection>=0.1.4",
+    "joblib>=1.4.2",
 ]
 dynamic = ["version"]
 
@@ -131,7 +132,8 @@ select = [
     "NPY"    # numpy,
 ]
 ignore = [
-    "SIM105"
+    "SIM105",
+    "RET504",
 ]
 [tool.ruff.per-file-ignores]
 "__init__.py" = ["F401"]

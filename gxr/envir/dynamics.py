@@ -187,7 +187,7 @@ class EnvirDynamics:
         raw_time: bool = False,
         progress: bool | dict = False,
         tol: float | tuple[float, float] = 1e-2,
-        etol: float | tuple[float, float] | None = 1e-2,
+        etol: float | tuple[float, float] | None = 5e-3,
         ptol: float | tuple[float, float] | None = None,
         htol: float | tuple[float, float] | None = None,
         n_attempts: int = 5,
@@ -288,12 +288,12 @@ class EnvirDynamics:
             errmsg = f"intergation failed {n_attempts} times; aborting"
             raise RuntimeError(errmsg)
 
-        E = sol.y[0, -1]
-        P = sol.y[1 : self.n_agents + 1, -1]
-        H = sol.y[-self.n_agents :, -1]
-        self.model.E = E
-        self.model.P = P
-        self.model.H = H
+        sol.t += self.model.T
+        self.model.T = sol.t[-1]
+        self.model.E = sol.y[0, -1]
+        self.model.Ehat = sol.y[1, -1]
+        self.model.P = sol.y[2 : self.n_agents + 2, -1]
+        self.model.H = sol.y[-self.n_agents :, -1]
         pbar.close()
         return EnvirDynamicsResults(sol)
 
@@ -315,8 +315,9 @@ class EnvirDynamics:
 
     def get_y0(self) -> FloatND:
         """Get initial state for ODE."""
-        E = self.model.E
-        return np.array([E, E, *self.model.P, *self.model.H]).copy()  # type: ignore
+        return np.array(
+            [self.model.E, self.model.Ehat, *self.model.P, *self.model.H]
+        ).copy()
 
     def get_vicious_bounds(self, sol: EnvirDynamicsResults) -> FloatND:
         """Get bounds of the vicious cycle region."""

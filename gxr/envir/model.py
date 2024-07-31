@@ -26,8 +26,12 @@ class EnvirModel:
         Utility function.
     behavior
         Behavior rules.
+    T
+        Current time.
     E
         Environment state.
+    Ehat
+        Perceived environment state.
     P
         Agents' profits.
     H
@@ -43,6 +47,7 @@ class EnvirModel:
         foresight: Foresight,
         utility: UtilityFunction,
         behavior: Behavior,
+        T0: float = 0.0,
         E0: float = 1.0,
         P0: FloatND | None = None,
         H0: FloatND | None = None,
@@ -74,6 +79,7 @@ class EnvirModel:
             errmsg = "'P0' and 'H0' have to be of the same shape"
             raise ValueError(errmsg)
 
+        self.T = T0
         self.E = E0
         self._P = P0
         self._H = H0
@@ -87,6 +93,7 @@ class EnvirModel:
             self.profits.rescale_cost_rates(n_agents)
 
         self.E *= self.envir.K
+        self.Ehat = self.E
 
     @property
     def n_agents(self) -> int:

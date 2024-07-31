@@ -1,8 +1,9 @@
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from itertools import product
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
+import joblib
 import numpy as np
 import pandas as pd
 import polars as pl
@@ -60,38 +61,60 @@ class Simulator:
         n_reps: int,
         n_jobs: int = 1,
         random_state: int | np.random.Generator | None = None,
+        split_epochs: bool = False,
         **kwargs: Any,
     ) -> pd.DataFrame:
         records = []
         n_jobs = min(n_jobs, n_reps)
         fields = self.extract_fields()
 
+        if split_epochs and round(n_epochs) != n_epochs:
+            errmsg = "'n_epochs' must be an integer when 'split_epochs=True'"
+            raise ValueError(errmsg)
+
         if not isinstance(random_state, np.random.Generator):
             random_state = np.random.default_rng(np.random.PCG64(random_state))
 
         records = []
 
-        for rng in random_state.spawn(n_reps):
+        for idx, rng in enumerate(random_state.spawn(n_reps), 1):
             game = self.make_game(rng)
-            sol = game.dynamics.run(n_epochs, **kwargs)
-            results = game.get_results(sol)
-            record = fields.copy()
-            for field, value in results.items():
-                if field in record:
-                    errmsg = f"duplicated '{field}' field"
-                    raise KeyError(errmsg)
-                record[field] = value
-            records.append(record)
+
+            epochs = [1] * int(n_epochs) if split_epochs else [n_epochs]
+
+            for dt in epochs:
+                sol = game.dynamics.run(dt, **kwargs)
+                results = {"rep_id": idx, **game.get_results(sol)}
+                results["R"] = results["U"].reshape(game.n_agents, -1).mean(0)
+                record = fields.copy()
+
+                sim_id = joblib.hash(
+                    (fields["param_id"], results["rep_id"]), hash_name="md5"
+                )
+                results = {"sim_id": sim_id, **results}
+
+                for field, value in results.items():
+                    if field in record:
+                        errmsg = f"duplicated '{field}' field"
+                        raise KeyError(errmsg)
+                    record[field] = value
+
+                if split_epochs:
+                    record["epoch"] = int(record["epochs"][-1])
+
+                records.append(record)
 
         data = pd.DataFrame(records)
         return data.convert_dtypes(convert_integer=False)
 
     def extract_fields(self) -> Mapping[str, Any]:
         """Extract fields from a ``game`` instance."""
-        return {
+        fields = {
             field: dotget(self.config, dotpath, item=True)
             for field, dotpath in self.fields.items()
         }
+        idx = joblib.hash(tuple(map(tuple, fields.items())), hash_name="md5")
+        return {**fields, "param_id": idx}
 
 
 class Simulation:
@@ -115,6 +138,7 @@ class Simulation:
         fields: Mapping[str, str] | None = None,
         batch_scale: int = 5,
         seed: int | None = None,
+        split_epochs: bool = True,
         *,
         n_jobs: int = 1,
         **game_kwargs: Any,
@@ -127,6 +151,7 @@ class Simulation:
         self.seed_sequence = np.random.SeedSequence(seed)
         self.n_jobs = n_jobs
         self.game_kwargs = game_kwargs
+        self.split_epochs = split_epochs
 
     @property
     def n_points(self) -> int:
@@ -161,7 +186,10 @@ class Simulation:
             leave=False,
         )
         data = pd.concat(results, axis=0, ignore_index=True).convert_dtypes()
-        return data.sort_values(by=list(self.fields))
+        if not self.split_epochs:
+            del data["epoch"]
+        df = data.sort_values(by=list(self.fields))
+        return SimulationFrame(df)
 
     def iter_results(
         self,
@@ -179,7 +207,10 @@ class Simulation:
     def compute(self, args: tuple[Simulator, np.random.Generator]) -> pd.DataFrame:
         simulator, seed = args
         return simulator.run(
-            n_epochs=self.n_epochs, n_reps=self.n_reps, random_state=seed
+            n_epochs=self.n_epochs,
+            n_reps=self.n_reps,
+            random_state=seed,
+            split_epochs=self.split_epochs,
         )
 
     def run(
@@ -188,9 +219,10 @@ class Simulation:
         parts = self.iter_results(**kwargs)
 
         if not path:
-            return pd.concat(parts, axis=0, ignore_index=True).sort_values(
+            df = pd.concat(parts, axis=0, ignore_index=True).sort_values(
                 by=list(self.fields)
             )
+            return SimulationFrame(df)
 
         path = Path(path)
         writer = None
@@ -209,3 +241,29 @@ class Simulation:
         if exception:
             raise exception
         return None
+
+
+class SimulationFrame(pd.DataFrame):
+    @property
+    def _constructor(self) -> type["SimulationFrame"]:
+        return self.__class__
+
+    def group_epochs(self) -> Self:
+        if "epoch" not in self.columns:
+            return self
+        array_cols = ["epochs", "T", "E", "H", "P", "U", "R"]
+        other_cols = [c for c in self.columns if c not in array_cols]
+        df = (
+            self.groupby(["sim_id"])
+            .agg(
+                {
+                    **{k: lambda x: x.head(1) for k in other_cols},
+                    **{k: lambda x: np.concatenate(x.to_list()) for k in array_cols},
+                }
+            )
+            .reset_index(drop=True)
+        )
+        del df["epoch"]
+        param_cols = df.columns[: df.columns.to_list().index("param_id")]
+        df = df.sort_values([*param_cols, "rep_id"]).reset_index(drop=True)
+        return df
