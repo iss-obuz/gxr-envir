@@ -135,7 +135,7 @@ class BehaviorRule(ABC):
 
     def __init__(
         self,
-        behavior: Behavior | None,
+        behavior: Behavior | None = None,
         *,
         weight: float = 1,
     ) -> None:
@@ -161,6 +161,15 @@ class BehaviorRule(ABC):
     @abstractmethod
     def dH(self, E: float, H: FloatND, P: FloatND) -> FloatND:
         """Determine change of agents' harvesting rates."""
+
+
+@registry.envir.rules.register("constant")
+class ConstantRule(BehaviorRule):
+    """Constant behavior rule."""
+
+    def dH(self, E: float, H: FloatND, P: FloatND) -> FloatND:  # noqa
+        """Determine change of agents' harvesting rates."""
+        return np.zeros_like(H)
 
 
 @registry.envir.rules.register("foresight")

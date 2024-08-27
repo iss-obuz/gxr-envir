@@ -33,13 +33,13 @@ class EnvirGame:
         self,
         model: EnvirModel,
         *,
-        dt: float = 0.1,
+        dt: float = 0.002,
     ) -> None:
         self.model = model
         self.dynamics = EnvirDynamics(self.model)
         self.dH = np.zeros_like(self.model.P)
         self.Ehat = self.model.E
-        self.dt = dt
+        self.dt = dt * self.model.envir.T_epsilon
         self.params = EnvirGameParams(self)
 
     @property
@@ -120,13 +120,16 @@ class EnvirGame:
 
     # Methods --------------------------------------------------------------------------
 
-    def step(self, H: FloatND | None) -> None:
+    def step(self, H: FloatND | None = None) -> None:
         """Run one simulation step."""
+        if H is None:
+            H = np.zeros_like(self.H)
         self.H = H
         dE = self.model.get_dE(self.E, self.H)
         dP = self.model.get_dP(self.E, self.H)
         dEhat = self.model.get_dEhat(self.E, self.Ehat)
-        self.dH = self.model.behavior.dH(self.E, self.H)
+        self.dH = self.model.behavior.dH(self.E, self.H, self.P)
+        self.model.T += self.dt
         self.model.E += dE * self.dt
         self.model._P += dP * self.dt
         self.Ehat += dEhat * self.dt
@@ -149,8 +152,7 @@ class EnvirGame:
         cls,
         config: Mapping[str, Any] | None = None,
         overrides: Mapping[str, Any] | None = None,
-        *,
-        dt: float = 0.1,
+        no_behavior: bool = False,
         **kwargs: Any,
     ) -> Self:
         """Initialize game instance from ``config``.
@@ -164,6 +166,9 @@ class EnvirGame:
             Can be used to define `"params.<name>"` keys in the
             ``overrides`` dictionary for convenience.
         """
+        cls_kwargs = {}
+        if "dt" in kwargs:
+            cls_kwargs["dt"] = kwargs.pop("dt")
         if not config:
             config = Config(resolve=False, interpolate=False)
         overrides = overrides or {}
@@ -178,9 +183,21 @@ class EnvirGame:
         for k, v in overrides.items():
             dotset(config, k, v, item=True)
 
-        config = Config(config, resolve=True, interpolate=True)
+        config = Config(config, resolve=False, interpolate=True)
+
+        if no_behavior:
+            config["model"]["behavior"]["rules"] = {"constant": {"@rules": "constant"}}
+            config = Config(config, resolve=True)
+            config["model"]["behavior"].rules_map = {
+                k: v
+                for k, v in config["model"]["behavior"].rules_map.items()
+                if k == "constant"
+            }
+        else:
+            config = Config(config, resolve=True)
+
         model = EnvirModel(**config["model"])
-        return cls(model, dt=dt)
+        return cls(model, **cls_kwargs)
 
 
 class EnvirGameParams:
